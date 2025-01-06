@@ -69,7 +69,7 @@ This driver is licensed under the [Apache License 2.0](http://www.apache.org/lic
 ## Changelog
 
 ### Version 0.9.0 (Beta)
-- Initial beta release.
+- 01-05-2025 - Initial beta release.
 
 ## Disclaimer
 
