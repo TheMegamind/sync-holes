@@ -1,0 +1,455 @@
+/**
+ *  Copyright 2025 bthrock
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ *  in compliance with the License. You may obtain a copy of the License at:
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software distributed under the License is distributed
+ *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+ *  for the specific language governing permissions and limitations under the License.
+ *  
+ *    Pi-hole 6 Blocking Control
+ *    →→ Enable/Disable DNS blocking for 1 or 2 Pi-hole 6 instances
+ *    →→ Disable Blocking using user-defined Default or command-time option
+ *    →→ Alternate On/Off Switch for compatibility with voice assistants
+ *    →→ Optional Auto-Refresh to track blocking status changes initiated elsewhere
+ *    →→ Tracks SID Expiration and reuses unexpired SIDs or re-authenticates to minimize active sessions
+ *     
+ *   Date            Who                    Description
+ *   -------------   -------------------    ---------------------------------------------------------
+ *   01-05-2025      bthrock                0.9.0 Initial Beta Release
+ *
+ * LINE 30 MAX 
+ */
+
+import groovy.transform.Field
+
+// Define constants
+@Field final String AUTH_ENDPOINT = "/api/auth"
+@Field final String DNS_BLOCKING_ENDPOINT = "/api/dns/blocking"
+@Field final String STATUS_ENABLED = "enabled"
+@Field final String STATUS_DISABLED = "disabled"
+@Field final String STATUS_ERROR = "error"
+@Field final String STATUS_INVALID_URL = "invalid URL"
+
+metadata {
+    definition(
+        name: "Pi-hole 6 Blocking Control",
+        namespace: "bthrock",
+        author: "Bob Throckmorton",
+        importUrl: "https://raw.githubusercontent.com/TheMegamind/Hubitat/refs/heads/main/Pi-hole%20v6%20Device%20Driver"
+    ) {
+        capability "Actuator"
+        capability "Switch"
+        capability "Refresh" //Updates pi blocking states. Useful if user wishes to monitor state changes from admin interface or other source.
+
+        attribute "pi1BlockingStatus", "string"
+        attribute "pi2BlockingStatus", "string"
+
+        command "on"       //Performs same function as enable, but is available to voice assistants.
+        command "off"      //Similar to disable, but is available to voice assistants and always uses defaultBlockingTime.
+        command "enable"
+        command "disable", [[name: "Timer (seconds)", type: "NUMBER", description: "Disable blocking for how long?"]]
+    }
+    
+    preferences {
+        input name: "pi1url", type: "text", title: "Pi-hole 1 URL", description: "Enter Pi-hole 1 URL (e.g., https://192.168.1.11:443)", required: true
+        input name: "pi1Password", type: "password", title: "Pi-hole 1 Password", description: "Password for Pi-hole 1 (Leave Blank if None)", required: false
+        input name: "pi2url", type: "text", title: "Pi-hole 2 URL (Optional)", description: "Enter Pi-hole 2 URL (e.g., https://192.168.1.12:443)", required: false
+        input name: "pi2Password", type: "password", title: "Pi-hole 2 Password (Optional)", description: "Password for Pi-hole 2 (Leave Blank if None)", required: false
+        input name: "defaultBlockingTime", type: "number", title: "Default Blocking Time (in seconds)", defaultValue: 300, required: false
+        input name: "autoRefreshInterval", type: "number", title: "Auto Refresh Interval (minutes)", description: "Auto Updates the Pi-hole Blocking states (0=Disabled)", defaultValue: 0, required: false
+        input name: "ignoreSSLIssues", type: "bool", title: "Ignore SSL Issues for HTTP Requests?", description: "Ignores SSL issues (e.g., self signed certificates) if enabled",defaultValue: true, required: false
+        input name: "enableInfoLogging", type: "bool", title: "Enable Info Logging?", defaultValue: true
+        input name: "enableDebugLogging", type: "bool", title: "Enable Debug Logging?", description: "If enabled, will Auto Disable after 30 minutes",defaultValue: true
+    }
+}
+
+// Initialization Methods
+def installed() {
+    logInfo("Driver installed")
+    initialize()
+}
+
+def updated() {
+    logInfo("Driver updated")
+    initialize()
+}
+
+def initialize() {
+    logInfo("Initializing Pi-hole Blocking Control Driver")
+
+    // Correctly assign the URLs for Pi-hole 1 and Pi-hole 2
+    state.piHoles = [
+        pi1: [
+            key: "pi1",
+            url: ensureHttps(settings.pi1url),  // Ensure Pi-hole 1 gets pi1url
+            name: "Pi-hole 1",
+            sid: null,
+            sidExpiration: 0,
+            currentBlockingStatus: STATUS_DISABLED
+        ],
+        pi2: [
+            key: "pi2",
+            url: settings.pi2url ? ensureHttps(settings.pi2url) : null,  // Ensure Pi-hole 2 gets pi2url
+            name: "Pi-hole 2",
+            sid: null,
+            sidExpiration: 0,
+            currentBlockingStatus: STATUS_DISABLED
+        ]
+    ]
+
+    // Validate URLs for each Pi-hole instance
+    validateUrls()
+
+    if (settings.enableDebugLogging) runIn(1800, "logsOff")
+    resetSessions()
+
+    // Auto-refresh logic based on user input
+    if (settings.autoRefreshInterval > 0) {
+        scheduleAutoRefresh()
+    }
+}
+
+def scheduleAutoRefresh() {
+    def interval = settings.autoRefreshInterval * 60  // Convert minutes to seconds
+    logInfo("Auto-refresh is enabled. Refreshing Pi-hole states every ${settings.autoRefreshInterval} minute(s).")
+    runIn(interval, "refresh")  // Schedule the refresh function to run every interval
+}
+
+def ensureHttps(String url) {
+    return url.toLowerCase().startsWith("https://") ? url : "https://${url}"
+}
+
+def isValidUrl(String url) {
+    // Regular expression to validate URLs starting with https:// followed by valid IP or hostname and optional port
+    def urlPattern = ~/^https:\/\/([A-Za-z0-9\-\.]+)(:\d+)?$/
+    return urlPattern.matcher(url).matches()
+}
+
+def validateUrls() {
+    // Check and log the correct assignment of Pi-hole URLs.
+    state.piHoles.each { key, piHole ->
+        if (piHole.url) {
+            if (!isValidUrl(piHole.url)) {
+                logError("Invalid URL for ${piHole.name}: ${piHole.url}")
+                sendEvent(name: "${piHole.key}BlockStatus", value: STATUS_INVALID_URL)
+                piHole.url = null  // Invalidate the URL if it is invalid
+            } else {
+                logInfo("URL for ${piHole.name} is valid: ${piHole.url}")
+            }
+        } else {
+            logWarn("URL for ${piHole.name} is not provided.")
+            sendEvent(name: "${piHole.key}BlockStatus", value: STATUS_INVALID_URL)
+        }
+    }
+}
+
+def resetSessions() {
+    state.piHoles.each { key, piHole ->
+        piHole.sid = null
+        piHole.sidExpiration = 0
+    }
+}
+
+// Command Handlers
+def on() {
+    logInfo("Enabling blocking for Pi-holes")
+    handleBlockingCommand(true, null)
+}
+
+def enable() {
+    logInfo("Enable command triggered.")
+    on()
+}
+
+def off() {
+    logInfo("Disabling blocking for Pi-holes using default timer")
+    disable(settings.defaultBlockingTime?.toInteger() ?: 300)
+}
+
+def disable(timer = null) {
+    timer = timer?.toInteger() ?: settings.defaultBlockingTime?.toInteger() ?: 300 // Ensure timer is always an Integer
+    logInfo("Disabling blocking for Pi-holes with a timer of ${timer} seconds")
+    handleBlockingCommand(false, timer)
+}
+
+def refresh() {
+    logInfo("Refreshing Pi-hole blocking status...")
+
+    state.piHoles.each { key, piHole ->
+        // Check if SID is valid; if not, authenticate to get a new SID
+        if (piHole.url) {
+            if (!piHole.sid || piHole.sidExpiration <= now()) {
+                getSessionId(piHole)  // Re-authenticate to get a valid SID
+            }
+
+            if (piHole.sid) {
+                // Now that we have a valid SID, fetch the blocking status
+                fetchBlockingStatus(piHole.url, piHole.sid, piHole.name)
+            } else {
+                logWarn("${piHole.name} SID not available after re-authentication.")
+                sendEvent(name: "${piHole.key}BlockStatus", value: STATUS_ERROR)
+            }
+        } else {
+            logWarn("${piHole.name} URL not configured.")
+            sendEvent(name: "${piHole.key}BlockStatus", value: STATUS_INVALID_URL)
+        }
+    }
+
+    // Reschedule the refresh if auto-refresh is enabled
+    if (settings.autoRefreshInterval > 0) {
+        def interval = settings.autoRefreshInterval * 60  // Convert minutes to seconds
+        runIn(interval, "refresh")  // Re-schedule refresh for the next interval
+    }
+}
+
+// Blocking Control Methods
+def handleBlockingCommand(boolean blockingStatus, Integer timer) {
+    state.piHoles.each { key, piHole ->
+        handleSinglePiBlocking(piHole, blockingStatus, timer)
+    }
+}
+
+def handleSinglePiBlocking(Map piHole, boolean blockingStatus, Integer timer) {
+    // Retrieve the password directly from preferences
+    def password = (piHole.key == "pi1") ? settings.pi1Password : settings.pi2Password
+
+    if (!piHole.url) {
+        logWarn("${piHole.name} URL not configured.")
+        sendEvent(name: "${piHole.key}BlockStatus", value: STATUS_INVALID_URL)
+        return
+    }
+
+    // Check if password is provided
+    if (password == null || password.isEmpty()) {
+        logInfo("${piHole.name} password not configured. Proceeding without password.")
+    }
+
+    // Attempt to get the session ID
+    def sid = getSessionId(piHole)
+
+    // If SID is null after authentication failure
+    if (sid == null) {
+        logError("Cannot proceed without a valid SID for ${piHole.name}.")
+        sendEvent(name: "${piHole.key}BlockStatus", value: STATUS_ERROR)
+        return
+    }
+
+    // Proceed to set blocking status if SID is valid
+    setBlockingStatus(piHole.url, sid, blockingStatus, timer, piHole.name)
+    if (!blockingStatus && timer) runIn(timer, "refresh")
+}
+
+def setBlockingStatus(String url, String sid, boolean blockingStatus, Integer timer, String piName) {
+    try {
+        // Ensure the URL starts with https://
+        url = ensureHttps(url)
+
+        // Construct the payload
+        def payload = blockingStatus ? [blocking: blockingStatus] : [blocking: blockingStatus, timer: timer]
+        def fullUrl = "${url}${DNS_BLOCKING_ENDPOINT}"
+        def postParams = [
+            uri: fullUrl,
+            contentType: "application/json",
+            ignoreSSLIssues: settings.ignoreSSLIssues, // Dynamically set based on preference
+            headers: ['sid': sid],
+            body: new groovy.json.JsonBuilder(payload).toString()
+        ]
+
+        // Log detail of setBlockingStatus Request
+        logDebug("Set Blocking ${blockingStatus ? STATUS_ENABLED.capitalize() : STATUS_DISABLED.capitalize()} Request: Method=POST, URL=${fullUrl}, Headers={Content-Type: application/json, sid: ${sid}}, Body=****") // Masking sensitive data
+
+        // Execute the HTTP POST request
+        httpPost(postParams) { resp ->
+            // Log the full JSON response
+            logDebug("REST API Response: ${resp.data}")
+
+            if (resp.status == 200) {
+                // Determine the blocking status from the response
+                def blockingStatusResponse = resp.data?.blocking
+                def status = (blockingStatusResponse == STATUS_ENABLED) ? STATUS_ENABLED : STATUS_DISABLED
+
+                // Determine the event name based on Pi name
+                def eventName = (piName == 'Pi-hole 1') ? 'pi1BlockingStatus' : 'pi2BlockingStatus'
+
+                // Send the event to update status
+                sendEvent(name: eventName, value: status.capitalize())
+
+                logInfo("${piName} blocking ${status.capitalize()}.")
+            } else {
+                logError("Failed to set blocking status ${blockingStatus ? STATUS_ENABLED.capitalize() : STATUS_DISABLED.capitalize()} for ${piName}. HTTP ${resp.status}")
+            }
+        }
+    } catch (Exception e) {
+        logError("Error toggling blocking for ${piName}: ${e.message}")
+        if (!settings.ignoreSSLIssues) { // If SSL is enforced
+            logInfo("SSL certificate validation is enforced. The error may be due to SSL certificate issues (e.g., self-signed certificates) with the Pi-hole instance.")
+        } else {
+            logInfo("The error occurred while attempting to set blocking status for ${piName}.")
+        }
+    }
+}
+
+def fetchBlockingStatus(url, sid, piName) {
+    try {
+        // Ensure the URL starts with https://
+        url = ensureHttps(url)
+        def blockingStatusUrl = "${url}${DNS_BLOCKING_ENDPOINT}"
+
+        // Log detail of fetchBlockingStatus Request
+        logDebug("Check Blocking Status Request: Method=GET, URL=${blockingStatusUrl}, Headers={sid: ${sid}}")
+
+        def getParams = [
+            uri: blockingStatusUrl,
+            contentType: "application/json",
+            ignoreSSLIssues: settings.ignoreSSLIssues, // Dynamically set based on preference
+            headers: ['sid': sid]
+        ]
+
+        httpGet(getParams) { resp ->
+            if (resp.status == 200) {
+                def blockingStatus = resp.data?.blocking
+                logDebug("REST API Response: ${resp.data}")
+
+                // Determine the status based on the blockingStatus value
+                def status = (blockingStatus == STATUS_ENABLED) ? STATUS_ENABLED : STATUS_DISABLED
+
+                // Determine the event name based on piName
+                def eventName = (piName == 'Pi-hole 1') ? 'pi1BlockingStatus' : 'pi2BlockingStatus'
+
+                // Send the event with the determined status
+                sendEvent(name: eventName, value: status.capitalize())
+
+                // Log the final status
+                logInfo("${piName} Blocking Status: ${status.capitalize()}")
+            } else {
+                logError("Failed to fetch blocking status for ${piName}: HTTP ${resp.status}")
+            }
+        }
+    } catch (Exception e) {
+        logError("Error fetching blocking status for ${piName}: ${e.message}")
+        if (!settings.ignoreSSLIssues) { // If SSL is enforced
+            logInfo("SSL certificate validation is enforced. The error may be due to SSL certificate issues (e.g., self-signed certificates) with the Pi-hole instance.")
+        } else {
+            logInfo("The error occurred while attempting to fetch blocking status for ${piName}.")
+        }
+    }
+}
+
+// Authentication Methods
+def getSessionId(Map piHole) {
+    def currentTime = now()
+
+    // Use existing SID if valid
+    if (piHole.sid && piHole.sidExpiration > currentTime) {
+        logDebug("Using existing SID for ${piHole.name}: ${piHole.sid} (expires at: ${new Date(piHole.sidExpiration).format('yyyy-MM-dd HH:mm:ss')})")
+        return piHole.sid
+    }
+
+    logInfo("Session ID expired or not found for ${piHole.name}. Reauthenticating...")
+
+    // Use the password directly from preferences instead of state
+    def password = (piHole.key == "pi1") ? settings.pi1Password : settings.pi2Password
+
+    // Perform authentication and get SID
+    def authResult = authenticate(piHole.url, password)
+
+    // **Add Null Check Here**
+    if (authResult == null) {
+        logError("Authentication failed for ${piHole.name}. Cannot obtain SID.")
+        sendEvent(name: "${piHole.key}BlockStatus", value: STATUS_ERROR)
+        return null
+    }
+
+    def sid = authResult[0]
+    def validity = authResult[1]?.toInteger() ?: 1800 // Default validity (1800 seconds) if not provided
+
+    // If SID is returned, update the state with the new SID and expiration time
+    if (sid) {
+        piHole.sid = sid
+        piHole.sidExpiration = currentTime + (validity * 1000) // Convert seconds to milliseconds
+        logDebug("New SID for ${piHole.name}: ${sid}, Validity=${validity} seconds, Expires at: ${new Date(piHole.sidExpiration).format('yyyy-MM-dd HH:mm:ss')}")
+    } else {
+        logInfo("Pi-hole ${piHole.name} authentication successful with no password set. Proceeding without SID.")
+    }
+
+    return sid
+}
+
+def authenticate(String url, String password) {
+    try {
+        // Ensure the URL starts with https://
+        url = ensureHttps(url)
+
+        // If no password is provided, include an empty string for password in the payload
+        def payload = password != null ? new groovy.json.JsonBuilder([password: password]).toString() : '{"password":""}'  // Handle case for no password
+
+        // Prepare the full URL for the authentication request
+        def fullUrl = "${url}${AUTH_ENDPOINT}"
+        def postParams = [
+            uri: fullUrl,
+            contentType: "application/json",
+            ignoreSSLIssues: settings.ignoreSSLIssues, // Dynamically set based on preference
+            body: payload
+        ]
+
+        // Log detail of Authentication Request with payload masked 
+        logDebug("Authentication Request: Method=POST, URL=${fullUrl}, Headers={Content-Type: application/json}, Body=****") // Masking sensitive data
+        
+        // Log detail of Authentication Request with payload unmasked (not recommended)
+        // # logDebug("Authentication Request: Method=POST, URL=${fullUrl}, Headers={Content-Type: application/json}, Body=${payload}")
+
+        def sid = null
+        def validity = 1800 // Default validity (1800 seconds) if not provided
+
+        // Perform the POST request to authenticate
+        httpPost(postParams) { resp ->
+            // Log the response for debugging
+            logDebug("REST API Response: ${resp.data}")
+
+            if (resp.status == 200) {
+                def sessionData = resp.data?.session
+                sid = sessionData?.sid
+                validity = sessionData?.validity ?: validity
+            } else {
+                logError("Authentication failed: HTTP ${resp.status}, Reason: ${resp.statusLine.reasonPhrase}")
+            }
+        }
+
+        return [sid, validity]
+    } catch (groovyx.net.http.HttpResponseException e) {
+        if (e.statusCode == 401) {
+            logError("Authentication failed: Unauthorized. Please check your password(s) in preferences.")
+        } else {
+            logError("HTTP error during authentication: ${e.statusCode} ${e.message}")
+            if (!settings.ignoreSSLIssues) { // If SSL is enforced
+                logError("SSL certificate validation is enforced. The error may be due to SSL certificate issues (e.g., self-signed certificates) with the Pi-hole instance.")
+            } else {
+                logError("Check that your password(s) are set correctly in preferences.")
+            }
+        }
+        return null  // Stops execution by exiting the method
+    } catch (Exception e) {
+        logError("Error during authentication: ${e.message}")
+        if (!settings.ignoreSSLIssues) { // If SSL is enforced
+            logError("SSL certificate validation is enforced. The error may be due to SSL certificate issues (e.g., self-signed certificates) with the Pi-hole instance.")
+        } else {
+            logError("Check that your password(s) are set correctly in preferences.")
+        }
+        return null
+    }
+}
+
+// Utility Methods
+def logDebug(msg) { if (settings.enableDebugLogging) log.debug(msg) }
+def logInfo(msg) { if (settings.enableInfoLogging) log.info(msg) }
+def logWarn(msg) { log.warn(msg) }
+def logError(msg) { log.error(msg) }
+
+def logsOff() {
+    logWarn("Debug logging disabled after 30 minutes.")
+    device.updateSetting("enableDebugLogging", [value: "false", type: "bool"])
+}
