@@ -39,7 +39,7 @@ metadata {
         name: "Pi-hole 6 Blocking Control",
         namespace: "bthrock",
         author: "Bob Throckmorton",
-        importUrl: "https://raw.githubusercontent.com/TheMegamind/Hubitat/refs/heads/main/Pi-hole%20v6%20Device%20Driver"
+        importUrl: "https://raw.githubusercontent.com/TheMegamind/Pi-hole6/refs/heads/main/Hubitat/Blocking%20Control%20Device%20Driver"
     ) {
         capability "Actuator"
         capability "Switch"
