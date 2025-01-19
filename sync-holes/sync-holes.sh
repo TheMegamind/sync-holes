@@ -33,6 +33,7 @@
 #   Date            Who                    Description
 #   -------------   -------------------    ------------------------------------
 #   01-05-2025      bthrock                0.9.0 Initial Beta Release
+#   01-19-2025      bthrock                0.9.1 Fix Log Rotation
 #
 # ==========================================================================
 #
@@ -292,6 +293,9 @@ validate_env() {
         handle_error "Log file directory '$log_dir' does not exist. Please create the directory or check your configuration."
     elif [ ! -w "$log_dir" ]; then
         handle_error "Log file directory '$log_dir' exists but is not writable. Check permissions or use sudo."
+    else 
+        # Check & rotate logs if needed
+        check_log_size
     fi
 
     # Check for missing environment variables
@@ -357,14 +361,14 @@ check_log_size() {
     local max_old_logs=${max_old_logs:-5}
 
     if [ -f "$log_file" ]; then
-        local log_size
-        log_size=$(du -m "$log_file" | cut -f1)  # Get log file size in MB
-
-        if (( log_size >= log_size_limit )); then
+        local log_size_kb
+        log_size_kb=$(du -k "$log_file" | cut -f1)  # Get log file size in KB
+        
+        if (( log_size_kb / 1024 >= log_size_limit )); then
             rotate_log  # Rotate if size limit is exceeded
         fi
     fi
-
+    
     cleanup_old_logs "$log_file" "$max_old_logs"  # Remove old logs beyond retention
 }
 
