@@ -34,6 +34,7 @@
 #   -------------   -------------------    ------------------------------------
 #   01-05-2025      bthrock                0.9.0 Initial Beta Release
 #   01-19-2025      bthrock                0.9.1 Fix Log Rotation
+#   02-22-2025      bthrock                0.9.2 Fix Import Options Handling
 #
 # ==========================================================================
 #
@@ -492,11 +493,11 @@ run_curl() {
     local headers="$3"
     local data="$4"
     local output="$5"
-    local form_data="$6"
+    shift 5
+    local extra_args=("$@")  # This will be your form data array
 
-    local curl_args=(-s -k -S -X "$method" "$url")  # Initialize curl arguments
-
-    > "$curl_error_log"  # Clear previous curl error log
+    local curl_args=(-s -k -S -X "$method" "$url")
+    > "$curl_error_log"
 
     # Add headers if provided
     if [ -n "$headers" ]; then
@@ -504,9 +505,10 @@ run_curl() {
         curl_args+=("${header_array[@]}")
     fi
 
-    # Add form data if provided
-    if [ -n "$form_data" ]; then
-        curl_args+=($form_data)
+    
+    # Add additional arguments if provided
+    if [ ${#extra_args[@]} -gt 0 ]; then
+        curl_args+=("${extra_args[@]}")
     fi
 
     # Add data payload if provided
@@ -514,18 +516,18 @@ run_curl() {
         curl_args+=(--data "$data")
     fi
 
+    
     # Specify output file if provided
     if [ -n "$output" ]; then
         curl_args+=(-o "$output")
     fi
 
-    # Construct a log-friendly version of the curl command with masked sensitive data
+    # Execute the curl command and capture the response
     local curl_command="curl $(printf "%s " "${curl_args[@]}")"
     local masked_curl_cmd
     masked_curl_cmd=$(mask_sensitive_data "$curl_command")
     log_message "CURL" "Run: ${masked_curl_cmd}" "if_verbose"
 
-    # Execute the curl command and capture the response
     local response
     response=$(curl "${curl_args[@]}" 2>"$curl_error_log")
     local curl_exit_code=$?
@@ -726,20 +728,18 @@ upload_teleporter_file() {
     local upload_url="$pi2_url/api/teleporter"
     log_message "UPLOAD" "Uploading Teleporter settings to $pi2_name." "if_verbose"
 
-    # Generate the import settings JSON
+    # Generate the import settings JSON and compact it
     local import_settings_json
     import_settings_json=$(generate_import_json)
-
-    # Compact the JSON to remove unnecessary whitespace
     local import_json_compact
     import_json_compact=$(echo "$import_settings_json" | jq -c .)
 
-    # Define form data with properly quoted JSON to prevent shell interpretation issues
-    local form_data="-F file=@$teleporter_file -F 'import=$import_json_compact'"
+    # Define form data as an array (no extra quoting needed because the JSON is compact)
+    local form_data=(-F "file=@$teleporter_file" -F "import=$import_json_compact")
 
-    # Execute run_curl with form data and capture the response
+    # Execute run_curl with the form data as additional arguments
     local upload_response
-    upload_response=$(run_curl "POST" "$upload_url" "-H accept:application/json -H sid:$pi2_sid" "" "" "$form_data")
+    upload_response=$(run_curl "POST" "$upload_url" "-H accept:application/json -H sid:$pi2_sid" "" "" "${form_data[@]}")
 
     # If there's content in the curl error log, handle the error
     if [ -s "$curl_error_log" ]; then handle_error; fi
