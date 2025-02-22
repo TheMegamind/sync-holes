@@ -106,6 +106,12 @@ Errors during execution are logged and displayed. Check the log file for detaile
 - Verify that the `.env` file is correctly configured.
 - Check permissions on directories for logs and temporary files.
 
+## Future Enhancements 
+**Currently Planned or Under Consideration**
+- Ability to synchronize more than two Pi-holes
+- Ability to chose import options via command-line
+- Optional Docker Installation 
+
 ## License
 
 This project is licensed under the MIT License. See the script header for details.
