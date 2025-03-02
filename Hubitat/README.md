@@ -75,4 +75,4 @@ This driver is licensed under the [Apache License 2.0](http://www.apache.org/lic
 
 **Pi-hole®**  and the Pi-hole logo are registered trademarks of **Pi-hole LLC**.
 
-**This project is independently-maintained. The maintainer is not affiliated with the [Official Pi-hole Project](https://github.com/pi-hole) or Hubitat in any way.**
+This project is independently-maintained. The maintainer is not affiliated with the [Official Pi-hole Project](https://github.com/pi-hole) or Hubitat in any way.
