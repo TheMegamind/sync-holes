@@ -116,6 +116,12 @@ Errors during execution are logged and displayed. Check the log file for detaile
 
 This project is licensed under the MIT License. See the script header for details.
 
+## Disclaimer
+
+**Pi-hole®**  and the Pi-hole logo are registered trademarks of **Pi-hole LLC**.
+
+**This project is independently-maintained. The maintainer is not affiliated with the [Official Pi-hole Project](https://github.com/pi-hole) in any way.**
+
 
 
 
