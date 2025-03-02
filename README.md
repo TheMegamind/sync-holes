@@ -16,4 +16,4 @@ The **Pi-hole6 Blocking Control** driver for Hubitat allows users to control DNS
 
 **Pi-hole®**  and the Pi-hole logo are registered trademarks of **Pi-hole LLC**.
 
-**These projects are independently-maintained. The maintainer is not affiliated with the official Pi-hole project in any way.**
+**These projects are independently-maintained. The maintainer is not affiliated with the [Official Pi-hole Project](https://github.com/pi-hole) in any way.**
