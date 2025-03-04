@@ -12,7 +12,7 @@
 - Command-line options to control console output
 - Detailed logging with configurable size and rotation, and optional masking of sensitive data
 - **Pending**
-    - Ability to chose import options via command-line
+    - Option to Create/Set Cron
     - Optional Docker Installation
       
  **History**:
@@ -21,7 +21,8 @@
  - 02-22-2025 → 0.9.2 Fix Import Options Handling
  - 03-03-2025 → 0.9.3 Synchronize > 2 Pi-holes 
      - *Requires updated sync-holes.env*
-     - *Note: Default for import_config changed to false by request*  
+     - *Note: Default for import_config changed to false*
+ - 03-05-2025 → 0.9.5 Modify Import Settings via Command Line 
 
 ## Prerequisites
 
