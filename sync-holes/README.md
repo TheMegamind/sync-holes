@@ -19,6 +19,7 @@
 - **Pi-hole 6** (required for API compatibility).
 - **jq**: Used for JSON parsing.
 - **curl**: Used for API requests.
+- **Bash 4 (or later)**: Required to properly handle arrays 
 
 ### Permissions
 - Depending on installation and configuration, the script may require `sudo` privileges to access certain files or directories.
