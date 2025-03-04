@@ -2,7 +2,7 @@
 
 ## Overview
 
-`sync-holes.sh` is designed to synchronize the configuration settings of two or more Pi-hole 6 instances using the Pi-hole REST API. It supports seamless transfer of settings from a primary instance (`pi1`) to any user-defined secondary instances.
+`sync-holes.sh` is designed to synchronize the configuration settings of two or more Pi-hole 6 instances using the Pi-hole REST API. It supports seamless transfer of settings from a primary instance to any user-defined secondary instances.
 
 **Features**:
 - Synchronization of Pi-hole settings (using API /teleporter method).
