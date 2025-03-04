@@ -13,7 +13,15 @@
 - Detailed logging with configurable size and rotation, and optional masking of sensitive data
 - **Pending**
     - Ability to chose import options via command-line
-    - Optional Docker Installation 
+    - Optional Docker Installation
+      
+ **History**:
+ - 01-05-2025 → Initial Beta Release
+ - 01-19-2025 → 0.9.1 Fix Log Rotation
+ - 02-22-2025 → 0.9.2 Fix Import Options Handling
+ - 03-03-2025 → 0.9.3 Synchronize > 2 Pi-holes 
+     - *Requires updated sync-holes.env*
+     - *Note: Default for import_config changed to false by request*  
 
 ## Prerequisites
 
