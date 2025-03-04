@@ -3,14 +3,14 @@
 #
 # ==========================================================================
 #                            sync-holes.sh
-#                  Synchronize Two Pi-hole 6 Instances
+#         Synchronize Primary Pi-hole to Multiple Secondary Pi-holes
 #
-# ** Please back-up your Teleporter settings BEFORE testing this script!! **
+#       ** Back-up Teleporter settings BEFORE testing this script!! **
 # ==========================================================================
 #
 # MIT License
 #
-# (c) 2024 by Megamind
+# (c) 2025 by Megamind
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -27,7 +27,7 @@
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 #
 #   Date            Who                    Description
@@ -35,6 +35,7 @@
 #   01-05-2025      bthrock                0.9.0 Initial Beta Release
 #   01-19-2025      bthrock                0.9.1 Fix Log Rotation
 #   02-22-2025      bthrock                0.9.2 Fix Import Options Handling
+#   03-03-2025      bthrock                0.9.3 Synchronize > 2 Pi-holes 
 #
 # ==========================================================================
 #
@@ -155,7 +156,8 @@ usage() {
     echo "============================================================================="
     echo ""
     echo "Description:"
-    echo "  This script synchronizes Teleporter settings between two Pi-hole instances."
+    echo "  This script synchronizes Teleporter settings from a primary Pi-hole to"
+    echo "  multiple secondary Pi-hole instances."
     echo "    ** Pi-hole v6 is required. This will not work with earlier versions **"
     echo ""
     echo "Usage: $(basename "$0") [-v] [-h] [-u]"
@@ -267,83 +269,50 @@ validate_env() {
     mask_sensitive="${mask_sensitive:-$default_mask_sensitive}"
     import_settings_json="${import_settings_json:-$default_import_settings_json}"
 
+    # Set defaults for individual import settings if omitted from .env
+    import_config="${import_config:-false}"
+    import_dhcp_leases="${import_dhcp_leases:-true}"
+    import_gravity_group="${import_gravity_group:-true}"
+    import_gravity_adlist="${import_gravity_adlist:-true}"
+    import_gravity_adlist_by_group="${import_gravity_adlist_by_group:-true}"
+    import_gravity_domainlist="${import_gravity_domainlist:-true}"
+    import_gravity_domainlist_by_group="${import_gravity_domainlist_by_group:-true}"
+    import_gravity_client="${import_gravity_client:-true}"
+    import_gravity_client_by_group="${import_gravity_client_by_group:-true}"
+
     # Derived paths based on temp_files_path
     teleporter_file="$temp_files_path/teleporter.zip"
-    pi1_session_file="$temp_files_path/pi1-session.json"
-    pi2_session_file="$temp_files_path/pi2-session.json"
+    primary_session_file="$temp_files_path/primary-session.json"
     curl_error_log="$temp_files_path/curl_error.log"
 
-    local required_vars=("pi1_url" "pi2_url")
+    local required_vars=("primary_url" "primary_pass" "primary_name")
     local missing_vars=()
     local invalid_urls=()
 
-    # Regex pattern for validating URLs
-    local url_regex='^(https?://)([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|([0-9]{1,3}\.){3}[0-9]{1,3})(:[0-9]{1,5})?$'
-
-    # Validate temporary files path
-    if [ ! -d "$temp_files_path" ]; then
-        handle_error "Temporary files path '$temp_files_path' does not exist. Please create the directory or check your configuration."
-    elif [ ! -w "$temp_files_path" ]; then
-        handle_error "Temporary files path '$temp_files_path' exists but is not writable. Check permissions or use sudo."
-    fi
-
-    # Validate log file directory
-    local log_dir
-    log_dir=$(dirname "$log_file")
-    if [ ! -d "$log_dir" ]; then
-        handle_error "Log file directory '$log_dir' does not exist. Please create the directory or check your configuration."
-    elif [ ! -w "$log_dir" ]; then
-        handle_error "Log file directory '$log_dir' exists but is not writable. Check permissions or use sudo."
-    else 
-        # Check & rotate logs if needed
-        check_log_size
-    fi
-
-    # Check for missing environment variables
+    # Validate primary environment variables
     for var in "${required_vars[@]}"; do
         if [ -z "${!var}" ]; then
             missing_vars+=("$var")
         fi
     done
 
+    # Check for secondary arrays existence and equal length
+    if [ -z "${secondary_names[*]}" ] || [ -z "${secondary_urls[*]}" ] || [ -z "${secondary_passes[*]}" ]; then
+        missing_vars+=("secondary_names, secondary_urls, secondary_passes")
+    elif [ "${#secondary_names[@]}" -ne "${#secondary_urls[@]}" ] || [ "${#secondary_names[@]}" -ne "${#secondary_passes[@]}" ]; then
+        handle_error "The arrays secondary_names, secondary_urls, and secondary_passes must have the same number of elements."
+    fi
+
+    # Regex pattern for validating URLs
+    local url_regex='^(https?://)([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|([0-9]{1,3}\.){3}[0-9]{1,3})(:[0-9]{1,5})?$'
+
+    if [[ ! "$primary_url" =~ $url_regex ]]; then
+        invalid_urls+=("primary_url")
+    fi
+
     if [ ${#missing_vars[@]} -gt 0 ]; then
         handle_error "Missing environment variables: ${missing_vars[*]}."
     fi
-
-    # Validate URL formats for pi1_url and pi2_url
-    for var in "${required_vars[@]}"; do
-        if [[ ! "${!var}" =~ $url_regex ]]; then
-            invalid_urls+=("$var")
-        else
-            # Further validate IP-based URLs and ports if needed
-            if [[ "${!var}" =~ ^https?://([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})(:([0-9]{1,5}))?$ ]]; then
-                ip="${BASH_REMATCH[1]}"
-                port="${BASH_REMATCH[3]}"
-
-                # Validate IP octets
-                valid_ip=true
-                IFS='.' read -r -a octets <<< "$ip"
-                for octet in "${octets[@]}"; do
-                    if (( octet < 0 || octet > 255 )); then
-                        valid_ip=false
-                        break
-                    fi
-                done
-
-                # Validate port if present
-                if [ -n "$port" ]; then
-                    if ! [[ "$port" =~ ^[0-9]{1,5}$ ]] || (( port < 1 || port > 65535 )); then
-                        valid_ip=false
-                    fi
-                fi
-
-                # Mark URL as invalid if IP/port validation fails
-                if [ "$valid_ip" = false ]; then
-                    invalid_urls+=("$var")
-                fi
-            fi
-        fi
-    done
 
     if [ ${#invalid_urls[@]} -gt 0 ]; then
         handle_error "Invalid URL format for: ${invalid_urls[*]} in $(basename "$env_file")."
@@ -505,7 +474,6 @@ run_curl() {
         curl_args+=("${header_array[@]}")
     fi
 
-    
     # Add additional arguments if provided
     if [ ${#extra_args[@]} -gt 0 ]; then
         curl_args+=("${extra_args[@]}")
@@ -516,7 +484,6 @@ run_curl() {
         curl_args+=(--data "$data")
     fi
 
-    
     # Specify output file if provided
     if [ -n "$output" ]; then
         curl_args+=(-o "$output")
@@ -531,7 +498,6 @@ run_curl() {
     local response
     response=$(curl "${curl_args[@]}" 2>"$curl_error_log")
     local curl_exit_code=$?
-    # echo "Exit Code: $curl_exit_code" 1>&2 #DEBUG
 
     # Handle transport-level errors (e.g., DNS failures)
     if [ $curl_exit_code -ne 0 ]; then
@@ -629,7 +595,6 @@ authenticate() {
         local pi_auth_url="$pi_url/api/auth"
         log_message "AUTHENTICATION" "$(mask_sensitive_data "Authenticating with $pi_name using password: $pi_pass")" "if_verbose"
 
-
         # Execute the authentication request and save the response
         run_curl "POST" "$pi_auth_url" '-H Content-Type:application/json' "$pi_auth_data" "$auth_response_file"
 
@@ -701,32 +666,35 @@ generate_import_json() {
 download_teleporter_file() {
     local headers="-H Accept:application/zip"
 
-    # Include session ID in headers if present. Skip for password-less Pi-hole instances. s
-    if [ -n "$pi1_sid" ]; then
-        headers="$headers -H sid:$pi1_sid"
+    # Include session ID in headers if present. Skip for password-less Pi-hole instances.
+    if [ -n "$primary_sid" ]; then
+        headers="$headers -H sid:$primary_sid"
     else
-        log_message "DOWNLOAD" "No sessionID provided for $pi1_name; proceeding without authentication." "if_verbose"
+        log_message "DOWNLOAD" "No sessionID provided for $primary_name; proceeding without authentication." "if_verbose"
     fi
 
-    log_message "DOWNLOAD" "Downloading Teleporter settings from $pi1_name." "if_verbose"
-    run_curl "GET" "$pi1_url/api/teleporter" "$headers" "" "$teleporter_file"
+    log_message "DOWNLOAD" "Downloading Teleporter settings from $primary_name." "if_verbose"
+    run_curl "GET" "$primary_url/api/teleporter" "$headers" "" "$teleporter_file"
 
     # Validate the downloaded file is a valid ZIP archive
     if [ ! -f "$teleporter_file" ] || ! file "$teleporter_file" | grep -q "Zip archive data"; then
-        handle_error "Failed to download or validate Teleporter file from $pi1_name."
+        handle_error "Failed to download or validate Teleporter file from $primary_name."
         return  # Exit the function after handling the error
     fi
 
-    log_message "DOWNLOAD" "Teleporter file downloaded from $pi1_name." "always"
+    log_message "DOWNLOAD" "Teleporter file downloaded from $primary_name." "always"
 }
 
 # =======================================
-# Upload Teleporter File to pi2
+# Upload Teleporter File to a Secondary Pi-hole
 # =======================================
-# Uploads the Teleporter settings to the secondary Pi-hole.
+# Uploads the Teleporter settings to a secondary Pi-hole.
 upload_teleporter_file() {
-    local upload_url="$pi2_url/api/teleporter"
-    log_message "UPLOAD" "Uploading Teleporter settings to $pi2_name." "if_verbose"
+    local pi_name="$1"
+    local pi_url="$2"
+    local pi_sid="$3"
+    local upload_url="${pi_url}/api/teleporter"
+    log_message "UPLOAD" "Uploading Teleporter settings to $pi_name." "if_verbose"
 
     # Generate the import settings JSON and compact it
     local import_settings_json
@@ -734,15 +702,15 @@ upload_teleporter_file() {
     local import_json_compact
     import_json_compact=$(echo "$import_settings_json" | jq -c .)
 
-    # Define form data as an array (no extra quoting needed because the JSON is compact)
+    # Define form data as an array
     local form_data=(-F "file=@$teleporter_file" -F "import=$import_json_compact")
 
     # Execute run_curl with the form data as additional arguments
     local upload_response
-    upload_response=$(run_curl "POST" "$upload_url" "-H accept:application/json -H sid:$pi2_sid" "" "" "${form_data[@]}")
+    upload_response=$(run_curl "POST" "$upload_url" "-H accept:application/json -H sid:$pi_sid" "" "" "${form_data[@]}")
 
     # If there's content in the curl error log, handle the error
-    if [ -s "$curl_error_log" ]; then handle_error; fi
+    if [ -s "$curl_error_log" ]; then handle_error "CURL error during upload to $pi_name."; fi
 
     # Log the full JSON API response with masking
     [[ -n "$upload_response" ]] && log_message "UPLOAD" "API Response: $(echo "$upload_response" | jq -c .)" "if_verbose"
@@ -753,8 +721,8 @@ upload_teleporter_file() {
     fi
 
     # Log a success message after uploading
-    log_message "UPLOAD" "Teleporter file uploaded to $pi2_name." "always"
-    log_message "INFO" "$pi1_name and $pi2_name settings synchronized!" "always" "green"
+    log_message "UPLOAD" "Teleporter file uploaded to $pi_name." "always"
+    log_message "INFO" "$primary_name and $pi_name settings synchronized!" "always" "green"
 }
 
 ################################################################################
@@ -769,12 +737,25 @@ validate_env        # Validate environment variables and paths
 check_dependencies  # Ensure required commands are available
 ssl_verification    # Log SSL verification status
 
-# Authenticate with both Pi-hole instances to obtain session IDs
-authenticate "$pi1_name" "$pi1_pass" "$pi1_url" "$pi1_session_file" "pi1_sid"
-authenticate "$pi2_name" "$pi2_pass" "$pi2_url" "$pi2_session_file" "pi2_sid"
+# Authenticate with the primary Pi-hole
+primary_session_file="$temp_files_path/primary-session.json"
+authenticate "$primary_name" "$primary_pass" "$primary_url" "$primary_session_file" "primary_sid"
 
 # Download the Teleporter file from the primary Pi-hole
 download_teleporter_file
 
-# Upload the Teleporter file to the secondary Pi-hole
-upload_teleporter_file
+# Loop over all secondary Pi-holes to synchronize the Teleporter file
+for i in "${!secondary_names[@]}"; do
+    secondary_name="${secondary_names[$i]}"
+    secondary_url="${secondary_urls[$i]}"
+    secondary_pass="${secondary_passes[$i]}"
+    
+    # Create a unique session file for each secondary Pi-hole
+    secondary_session_file="${temp_files_path}/secondary-session_$i.json"
+    
+    # Authenticate with the secondary Pi-hole
+    authenticate "$secondary_name" "$secondary_pass" "$secondary_url" "$secondary_session_file" "secondary_sid"
+    
+    # Upload the Teleporter file to the secondary Pi-hole
+    upload_teleporter_file "$secondary_name" "$secondary_url" "$secondary_sid"
+done
