@@ -1,6 +1,6 @@
 # Pi-hole® 6 Utilities
 
-#### *As of 5-January-2025, the following projects have been released to public beta:*
+#### *The following projects are currently in beta:*
 
 ##
 
@@ -10,7 +10,7 @@ The **Pi-hole6 Blocking Control** driver for Hubitat allows users to control DNS
 
 ### sync-holes.sh - Bash Script
 
-**sync-holes.sh** is a bash script designed to synchronize the configuration settings of two Pi-hole 6 instances using the Pi-hole REST API. It supports seamless transfer of settings from a primary instance (pi1) to a secondary instance (pi2).
+**sync-holes.sh** is a bash script designed to synchronize the configuration settings of two or more Pi-hole 6 instances using the Pi-hole REST API. It supports seamless transfer of settings from a primary instance to any number of user-defined secondary instances.
 
 ## Disclaimer
 
