@@ -2,16 +2,18 @@
 
 ## Overview
 
-`sync-holes.sh` is designed to synchronize the configuration settings of two Pi-hole 6 instances using the Pi-hole REST API. It supports seamless transfer of settings from a primary instance (`pi1`) to a secondary instance (`pi2`).
+`sync-holes.sh` is designed to synchronize the configuration settings of two or more Pi-hole 6 instances using the Pi-hole REST API. It supports seamless transfer of settings from a primary instance (`pi1`) to any user-defined secondary instances.
 
 **Features**:
 - Synchronization of Pi-hole settings (using API /teleporter method).
 - Environment-based configuration, including optional parameters.
-- Session management re-authenticates only when needed, so as to not create concurrent sessions.
+- Intelligent session management re-authenticates only when needed, so as to not create concurrent sessions.
 - Configurable SSL support to simplify use with self-signed certificates
 - Command-line options to control console output
 - Detailed logging with configurable size and rotation, and optional masking of sensitive data
-- Docker compatible (in pre-Beta testing)
+- **Pending**
+    - Ability to chose import options via command-line
+    - Optional Docker Installation 
 
 ## Prerequisites
 
@@ -106,12 +108,6 @@ Errors during execution are logged and displayed. Check the log file for detaile
 - Ensure `jq` and `curl` are installed.
 - Verify that the `.env` file is correctly configured.
 - Check permissions on directories for logs and temporary files.
-
-## Future Enhancements 
-**Currently Planned or Under Consideration**
-- Ability to synchronize more than two Pi-holes
-- Ability to chose import options via command-line
-- Optional Docker Installation 
 
 ## License
 
