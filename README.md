@@ -22,7 +22,7 @@
  - 03-03-2025 → 0.9.3 Synchronize > 2 Pi-holes 
      - *Requires updated sync-holes.env*
      - *Note: Default for import_config changed to false*
- - 03-05-2025 → 0.9.5 Modify Import Settings via Command Line 
+ - 03-05-2025 → 0.9.4 Modify Import Settings via Command Line 
 
 ## Prerequisites
 
