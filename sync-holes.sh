@@ -1,12 +1,12 @@
 #!/bin/bash
 
 #
-# ==========================================================================
+# ===============================================================================
 #                            sync-holes.sh
 #         Synchronize Primary Pi-hole to Multiple Secondary Pi-holes
 #
 #       ** Back-up Teleporter settings BEFORE testing this script!! **
-# ==========================================================================
+# ===============================================================================
 #
 # MIT License
 #
@@ -31,13 +31,14 @@
 # SOFTWARE.
 #
 #   Date            Who                    Description
-#   -------------   -------------------    ------------------------------------
+#   -------------   -------------------    --------------------------------------
 #   01-05-2025      bthrock                0.9.0 Initial Beta Release
 #   01-19-2025      bthrock                0.9.1 Fix Log Rotation
 #   02-22-2025      bthrock                0.9.2 Fix Import Options Handling
-#   03-03-2025      bthrock                0.9.3 Synchronize > 2 Pi-holes 
+#   03-03-2025      bthrock                0.9.3 Synchronize > 2 Pi-holes
+#   03-04-2025      bthrock                0.9.4 Override Import Settings via CLI
 #
-# ==========================================================================
+# ===============================================================================
 #
 
 # =======================================
@@ -54,6 +55,7 @@ declare -Ar COLORS=(
 # Default Values for Environment Variables
 # ========================================
 declare -r env_file="/usr/local/etc/sync-holes.env"
+
 declare -r default_log_file="/var/log/sync-holes.log"
 declare -r default_temp_files_path="/tmp"
 
@@ -152,6 +154,8 @@ mask_sensitive_data() {
 # =======================================
 # Prints the script's usage information and exits.
 usage() {
+    example_json='{"config":false,"dhcp_leases":false,"gravity":{"group":true,"adlist":false,"adlist_by_group":true,"domainlist":true,"domainlist_by_group":true,"client":true,"client_by_group":false}}'
+    pretty_json=$(echo "$example_json" | jq .)
     echo ""
     echo "============================================================================="
     echo ""
@@ -160,26 +164,42 @@ usage() {
     echo "  multiple secondary Pi-hole instances."
     echo "    ** Pi-hole v6 is required. This will not work with earlier versions **"
     echo ""
-    echo "Usage: $(basename "$0") [-v] [-h] [-u]"
+    echo "Usage: $(basename "$0") [-v] [-h] [-u] [-I inline_json] [-F json_file]"
     echo ""
     echo "Options:"
-    echo "  -v    Enable verbose mode"
-    echo "  -h    Display this help message"
-    echo "  -u    Disable masking of sensitive data in logs (unmask)"
+    echo "  -v               Enable verbose mode"
+    echo "  -h               Display this help message"
+    echo "  -u               Disable masking of sensitive data in logs (unmask)"
+    echo "  -I inline_json   Override import settings with an inline JSON string."
+    echo "  -F json_file     Override import settings by specifying a JSON file."
     echo ""
     echo "Examples:"
-    echo "  $(basename "$0")          # Run the script normally"
-    echo "  $(basename "$0") -v       # Run the script with verbose output"
-    echo "  $(basename "$0") -u       # Run the script without masking sensitive data"
-    echo "  $(basename "$0") -v -u    # Run the script with verbose output and unmask data"
-    echo "  $(basename "$0") -h       # Display this help message"
+    echo "  # Run the script normally"
+    echo "    $(basename "$0")"
+    echo "  # Run the script with verbose output"
+    echo "    $(basename "$0") -v"
+    echo "  # Run the script without masking sensitive data"
+    echo "    $(basename "$0") -u"
+    echo ""
+    echo "  # Run with import settings overridden inline via JSON"
+    echo "    $(basename "$0") -I '$pretty_json'"
+    echo ""
+    echo "  # Run with import settings overridden by a JSON file"
+    echo "    $(basename "$0") -F /path/to/import_settings.json"
     echo ""
     echo "Note:"
+    echo "  Any import settings keys omitted from the inline or file-based JSON will,"  
+    echo "  assume their default value from the .env file. So if a user wants to"
+    echo "  override only one or two keys, they may supply an abbreviated JSON"
+    echo "  (e.g. '{"dhcp_leases": false}') and only the default value(s) for the"
+    echo "  specified key(s) will be overridden while all others remain unchanged."
+    echo ""  
+    echo "Reminder:"
     echo "  Depending on your installation and system configuration, you may need to run"
-    echo "  this script with sudo for necessary permissions, for example:"
+    echo "  this script with sudo to access protected directories, for example:"
     echo ""
-    echo "  sudo $(basename "$0")           # Run the script normally using sudo"
-    echo "  sudo $(basename "$0") -v        # Run the script with verbose output using sudo"
+    echo "    sudo $(basename "$0")           # Run the script normally using sudo"
+    echo "    sudo $(basename "$0") -v        # Run the script with verbose output using sudo"
     echo ""
     echo "============================================================================="
     echo ""
@@ -187,18 +207,25 @@ usage() {
 }
 
 # =======================================
-# Parsing Command-Line Argument(s)
+# Parse options using getopts
 # =======================================
 verbose=0
+override_import_settings=""
+import_settings_file=""
 
-# Parse options using getopts
-while getopts ":vhu" opt; do
+while getopts ":vhuI:F:" opt; do
   case ${opt} in
     v )
       verbose=1
       ;;
     u )
       mask_sensitive_override=0  # Explicit override for unmasking
+      ;;
+    I )
+      override_import_settings="$OPTARG"
+      ;;
+    F )
+      import_settings_file="$OPTARG"
       ;;
     h )
       usage
@@ -209,7 +236,6 @@ while getopts ":vhu" opt; do
       ;;
   esac
 done
-
 
 # =======================================
 # Load Environment Variables
@@ -333,12 +359,12 @@ check_log_size() {
     if [ -f "$log_file" ]; then
         local log_size_kb
         log_size_kb=$(du -k "$log_file" | cut -f1)  # Get log file size in KB
-        
+
         if (( log_size_kb / 1024 >= log_size_limit )); then
             rotate_log  # Rotate if size limit is exceeded
         fi
     fi
-    
+
     cleanup_old_logs "$log_file" "$max_old_logs"  # Remove old logs beyond retention
 }
 
@@ -435,7 +461,7 @@ cleanup() {
         exit_code=1
     fi
 
-    # Report Completion based on exit code. 
+    # Report Completion based on exit code.
     if [ $exit_code -ne 0 ]; then
         log_message "INFO" "Exiting ($exit_code)." "always"
       else
@@ -646,17 +672,32 @@ authenticate() {
 # =======================================
 # Creates a JSON object for import settings using jq.
 generate_import_json() {
-    jq -n \
-        --argjson config "$import_config" \
-        --argjson dhcp_leases "$import_dhcp_leases" \
-        --argjson gravity_group "$import_gravity_group" \
-        --argjson gravity_adlist "$import_gravity_adlist" \
-        --argjson gravity_adlist_by_group "$import_gravity_adlist_by_group" \
-        --argjson gravity_domainlist "$import_gravity_domainlist" \
-        --argjson gravity_domainlist_by_group "$import_gravity_domainlist_by_group" \
-        --argjson gravity_client "$import_gravity_client" \
-        --argjson gravity_client_by_group "$import_gravity_client_by_group" \
-        '{config: $config, dhcp_leases: $dhcp_leases, gravity: {group: $gravity_group, adlist: $gravity_adlist, adlist_by_group: $gravity_adlist_by_group, domainlist: $gravity_domainlist, domainlist_by_group: $gravity_domainlist_by_group, client: $gravity_client, client_by_group: $gravity_client_by_group}}'
+  # Build the default import settings JSON using values loaded from .env or set in validate_env.
+  default_import_json=$(jq -n \
+    --argjson config "$import_config" \
+    --argjson dhcp_leases "$import_dhcp_leases" \
+    --argjson gravity_group "$import_gravity_group" \
+    --argjson gravity_adlist "$import_gravity_adlist" \
+    --argjson gravity_adlist_by_group "$import_gravity_adlist_by_group" \
+    --argjson gravity_domainlist "$import_gravity_domainlist" \
+    --argjson gravity_domainlist_by_group "$import_gravity_domainlist_by_group" \
+    --argjson gravity_client "$import_gravity_client" \
+    --argjson gravity_client_by_group "$import_gravity_client_by_group" \
+    '{config: $config, dhcp_leases: $dhcp_leases, gravity: {group: $gravity_group, adlist: $gravity_adlist, adlist_by_group: $gravity_adlist_by_group, domainlist: $gravity_domainlist, domainlist_by_group: $gravity_domainlist_by_group, client: $gravity_client, client_by_group: $gravity_client_by_group}}')
+
+  if [ -n "$override_import_settings" ]; then
+    # Remove keys from the override that have null values.
+    clean_override=$(echo "$override_import_settings" | jq 'with_entries(select(.value != null))')
+    # Merge the default JSON with the clean override.
+    # The '*' operator overlays keys from the override onto the default.
+    # Finally, delete any keys that remain null.
+    final_import_json=$(echo "$default_import_json" "$clean_override" | jq -s '.[0] * .[1] | del(..|select(. == null))')
+  else
+    final_import_json="$default_import_json"
+  fi
+
+  # Output the final JSON (compact representation)
+  echo "$final_import_json"
 }
 
 # =======================================
@@ -729,10 +770,21 @@ upload_teleporter_file() {
 #                          MAIN SCRIPT EXECUTION FLOW
 ################################################################################
 
-# Initialize script variables and configurations
 script_name=$(basename "$0")
 log_message "START" "Running $script_name..." "always"
+
 load_env            # Load environment variables from .env file
+
+# Apply Import Settings Overrides AFTER loading .env
+if [ -n "$import_settings_file" ]; then
+  if [ -f "$import_settings_file" ]; then
+    override_import_settings=$(cat "$import_settings_file")
+  else
+    echo "Import settings file '$import_settings_file' not found."
+    exit 1
+  fi
+fi
+
 validate_env        # Validate environment variables and paths
 check_dependencies  # Ensure required commands are available
 ssl_verification    # Log SSL verification status
@@ -749,13 +801,13 @@ for i in "${!secondary_names[@]}"; do
     secondary_name="${secondary_names[$i]}"
     secondary_url="${secondary_urls[$i]}"
     secondary_pass="${secondary_passes[$i]}"
-    
+
     # Create a unique session file for each secondary Pi-hole
     secondary_session_file="${temp_files_path}/secondary-session_$i.json"
-    
+
     # Authenticate with the secondary Pi-hole
     authenticate "$secondary_name" "$secondary_pass" "$secondary_url" "$secondary_session_file" "secondary_sid"
-    
+
     # Upload the Teleporter file to the secondary Pi-hole
     upload_teleporter_file "$secondary_name" "$secondary_url" "$secondary_sid"
 done
