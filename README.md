@@ -63,6 +63,8 @@ The script checks for required dependencies, verifies Pi-hole v6, and offers to 
     - Whether to create a symlink or not.
     - Cron job setup.
 
+**Note**: If you pick a non-default `.env` directory during advanced installation, the script automatically creates a symlink at `/usr/local/etc/sync-holes.env` so that the main `sync-holes.sh` script can still find it.
+
 ### Simulation Mode
 - If you want to see what would happen without making changes, use:
    ```bash
