@@ -99,7 +99,7 @@ The script checks for required dependencies, verifies Pi-hole v6, and offers to 
    cp sync-holes.env /usr/local/etc/
    chmod +x /usr/local/bin/sync-holes.sh
 
-- Edit the .env File and configure the environment variables (primary/secondary Pi-hole details, etc.) in /usr/local/etc/sync-holes.env.
+- Edit the .env File and configure the environment variables (primary/secondary Pi-hole details, etc.) in `/usr/local/etc/sync-holes.env`.
 - *Note: The user should also handle log directory permissions if they want logs in /var/log/*
 
 - (Optional) Create a Symlink
@@ -206,7 +206,7 @@ These defaults may be modified in the .env file
 - Errors during execution are logged and displayed, sometimes with a suggested fix. You can review any errors by:
   - Checking the log file, or 
   - Running `sync-holes -v` to output the log to the screen.
-  - Running 'sync-holes -v -u' will log to the screen and unmask any sensitive data
+  - Running `sync-holes -v -u` will log to the screen and unmask any sensitive data
 - Any curl errors are printed to the screen and included in the log. The `curl_error.log` that is deleted during cleanup is a placeholder and *does not contain any information that hasn't already been logged*.
  
 ## License
