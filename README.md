@@ -5,14 +5,14 @@
 `sync-holes.sh` synchronizes the Teleporter settings from a primary Pi-hole to multiple secondary Pi-hole instances via the Pi-hole REST API. 
 
 **Features:**
-- Easy, automated installation
+- Easy, automated script-based installation (Docker not required)
 - Environment-based configuration via a `.env` file.
 - Intelligent session management (re-authenticates only when needed).
 - Configurable SSL support for self‑signed certificates.
 - Command‑line options to control console output and sensitive data masking.
 - Command-line options to override default import configuration settings
 - Detailed logging with configurable size, rotation, and optional data masking.
-- Optional Docker Installation (*Pending*)
+- **Optional** Docker Installation (*Pending*)
 
 **History:**
 - **01-05-2025** → Initial Beta Release  
