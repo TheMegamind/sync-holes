@@ -54,6 +54,10 @@ declare -Ar COLORS=(
 # ========================================
 # Default Values for Environment Variables
 # ========================================
+# Note: 
+# The .env is read from /usr/local/etc/sync-holes.env. Depending on the
+# the installation this may be a literal file OR a symlink to the user's
+# preferred directory created by the install script. 
 declare -r env_file="/usr/local/etc/sync-holes.env"
 
 declare -r default_log_file="/var/log/sync-holes.log"
