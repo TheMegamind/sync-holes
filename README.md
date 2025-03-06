@@ -2,7 +2,7 @@
 
 ## Overview
 
-`sync-holes.sh` synchronizes the Teleporter settings from a primary Pi-hole to multiple secondary Pi-hole instances via the Pi-hole REST API.
+`sync-holes.sh` synchronizes the Teleporter settings from a primary Pi-hole to multiple secondary Pi-hole instances via the Pi-hole REST API. 
 
 **Features:**
 - Easy, automated installation
