@@ -295,7 +295,6 @@ prompt "Do you wish to configure your Pi-hole(s) in '$ENV_PATH' now? (y/N): "
 read -r config_choice
 
 configure_piholes() {
-  # Note that Pi-hole #1 is primary, default port is 443
   info "Note: Pi-hole #1 is the PRIMARY/SOURCE. All others are SECONDARY/TARGETS."
   info "By default, Pi-hole uses port 443 for its REST API unless changed."
 
@@ -338,7 +337,6 @@ configure_piholes() {
     fi
 
     if [[ -z "$response" ]]; then
-      # No response at all
       warn "No response from the API. Check your URL:port or SSL settings."
       warn "We'll still record your entries, but it might not work."
     fi
@@ -350,24 +348,30 @@ configure_piholes() {
       warn "We'll still record your entries, but be aware it might not work."
     fi
 
-    # Even if validation fails, we still record
     if (( i == 1 && primary_done == 0 )); then
+      # Primary lines
       run_cmd "sudo sed -i 's|^primary_name=.*|primary_name=\"$friendly\"|' \"$ENV_PATH\" || true"
       run_cmd "sudo sed -i 's|^primary_url=.*|primary_url=\"$pihole_url\"|' \"$ENV_PATH\" || true"
       run_cmd "sudo sed -i 's|^primary_pass=.*|primary_pass=\"$pihole_pass\"|' \"$ENV_PATH\" || true"
       primary_done=1
     else
+      # Collect secondaries
       second_names+=("$friendly")
       second_urls+=("$pihole_url")
       second_passes+=("$pihole_pass")
     fi
   done
 
-  # If we have more than 1 Pi-hole, we set up secondary arrays
+  #============================================================================
+  # CHANGED: If pi_count>1, remove old secondary lines and insert new lines
+  #          directly under the block containing:
+  #          "# - Example: ("Element1" "Element2")"
+  #          If pi_count==1, do NOTHING (no removal).
+  #============================================================================
   if (( pi_count > 1 )); then
-    local names_str="secondary_names=("
-    local urls_str="secondary_urls=("
-    local passes_str="secondary_passes=("
+    local names_str='secondary_names=('
+    local urls_str='secondary_urls=('
+    local passes_str='secondary_passes=('
 
     for (( j=0; j<${#second_names[@]}; j++ )); do
       names_str+="\"${second_names[$j]}\" "
@@ -375,18 +379,28 @@ configure_piholes() {
       passes_str+="\"${second_passes[$j]}\" "
     done
 
-    names_str+=")"
-    urls_str+=")"
-    passes_str+=")"
+    names_str+=')'
+    urls_str+=')'
+    passes_str+=')'
 
-    # Remove old lines, then append
+    # Remove old secondary_ lines
     run_cmd "sudo sed -i '/^secondary_names=/d' \"$ENV_PATH\""
     run_cmd "sudo sed -i '/^secondary_urls=/d' \"$ENV_PATH\""
     run_cmd "sudo sed -i '/^secondary_passes=/d' \"$ENV_PATH\""
 
-    run_cmd "echo \"$names_str\" | sudo tee -a \"$ENV_PATH\""
-    run_cmd "echo \"$urls_str\" | sudo tee -a \"$ENV_PATH\""
-    run_cmd "echo \"$passes_str\" | sudo tee -a \"$ENV_PATH\""
+    # Build a temp file containing the new lines
+    local temp_file
+    temp_file="$(mktemp)"
+    echo "$names_str"   >  "$temp_file"
+    echo "$urls_str"    >> "$temp_file"
+    echo "$passes_str"  >> "$temp_file"
+
+    # Insert them right after the line containing the example comment
+    # Adjust the pattern if your comment line differs
+    # e.g.  # - Example: ("Element1" "Element2")
+    run_cmd "sudo sed -i '/^# - Example: (\"Element1\" \"Element2\")/r $temp_file' \"$ENV_PATH\""
+
+    run_cmd "rm -f \"$temp_file\""
   fi
 
   info "Done configuring Pi-holes!"
