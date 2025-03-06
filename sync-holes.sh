@@ -30,13 +30,14 @@
 # OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 #
-#   Date            Who                    Description
-#   -------------   -------------------    --------------------------------------
-#   01-05-2025      bthrock                0.9.0 Initial Beta Release
-#   01-19-2025      bthrock                0.9.1 Fix Log Rotation
-#   02-22-2025      bthrock                0.9.2 Fix Import Options Handling
-#   03-03-2025      bthrock                0.9.3 Synchronize > 2 Pi-holes
-#   03-04-2025      bthrock                0.9.4 Override Import Settings via CLI
+#   Date            Description
+#   -------------   ------------------------------------------------------------
+#   01-05-2025      0.9.0 Initial Beta Release
+#   01-19-2025      0.9.1 Fix Log Rotation
+#   02-22-2025      0.9.2 Fix Import Options Handling
+#   03-03-2025      0.9.3 Synchronize > 2 Pi-holes
+#   03-04-2025      0.9.4 Override Import Settings via CLI
+#   03-06-2025      0.9.5 Beta Release Candidate 0.9.5
 #
 # ===============================================================================
 #
