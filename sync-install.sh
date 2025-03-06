@@ -37,11 +37,12 @@ NC="\033[0m"
 # Default Variables
 ###############################################################################
 REPO_URL="https://github.com/TheMegamind/sync-holes.git"
-CLONE_DIR="."  # Use current directory (flat repo layout)
+CLONE_DIR="."  
 INSTALL_DIR="/usr/local/bin"
 ENV_DIR="/usr/local/etc"
 SIMULATE=0
 ADVANCED=0
+
 CRON_DEFAULT_SCHEDULE="0 3 * * *"  # e.g., run daily at 3:00 AM
 
 ###############################################################################
@@ -111,6 +112,7 @@ warn() {
 }
 
 prompt() {
+  # Print a prompt in cyan
   echo -en "${CYAN}$*${NC}"
 }
 
@@ -179,12 +181,28 @@ if [[ $ADVANCED -eq 1 ]]; then
   prompt "Script install directory? Press Enter to keep default: [$INSTALL_DIR] "
   read -r choice
   if [[ -n "$choice" ]]; then
+    # If there's an old file in the old $INSTALL_DIR, remove it
+    if [[ -f "$INSTALL_DIR/sync-holes.sh" && "$INSTALL_DIR" != "$choice" ]]; then
+      prompt "Remove old $INSTALL_DIR/sync-holes.sh? (y/N): "
+      read -r remove_sh
+      if [[ "$remove_sh" =~ ^[Yy]$ ]]; then
+        run_cmd "sudo rm -f \"$INSTALL_DIR/sync-holes.sh\""
+      fi
+    fi
     INSTALL_DIR="$choice"
   fi
 
   prompt "Environment (.env) directory? Press Enter to keep default: [$ENV_DIR] "
   read -r choice
   if [[ -n "$choice" ]]; then
+    # If there's an old env file in the old $ENV_DIR, remove it
+    if [[ -f "$ENV_DIR/sync-holes.env" && "$ENV_DIR" != "$choice" ]]; then
+      prompt "Remove old $ENV_DIR/sync-holes.env? (y/N): "
+      read -r remove_env
+      if [[ "$remove_env" =~ ^[Yy]$ ]]; then
+        run_cmd "sudo rm -f \"$ENV_DIR/sync-holes.env\""
+      fi
+    fi
     ENV_DIR="$choice"
   fi
 else
@@ -211,7 +229,6 @@ LOCAL_MTIME=0
 REPO_MTIME=0
 
 if [[ -f "$ENV_PATH" ]]; then
-  # local .env exists
   LOCAL_MTIME=$(stat -c %Y "$ENV_PATH" 2>/dev/null || echo 0)
 fi
 
@@ -249,7 +266,10 @@ prompt "Do you wish to configure your Pi-hole(s) in '$ENV_PATH' now? (y/N): "
 read -r config_choice
 
 configure_piholes() {
-  # 1) Ask how many Pi-holes
+  # Note that Pi-hole #1 is primary, default port is 443
+  info "Note: Pi-hole #1 is the PRIMARY/SOURCE. All others are SECONDARY/TARGETS."
+  info "By default, Pi-hole uses port 443 for its REST API unless changed."
+
   prompt "How many Pi-hole instances do you want to configure? "
   read -r pi_count
   if ! [[ "$pi_count" =~ ^[0-9]+$ ]]; then
@@ -257,7 +277,6 @@ configure_piholes() {
     return
   fi
 
-  # We'll store the primary in distinct vars; secondaries in arrays
   local primary_done=0
   local second_names=()
   local second_urls=()
@@ -265,7 +284,11 @@ configure_piholes() {
 
   for (( i=1; i<=$pi_count; i++ )); do
     echo ""
-    info "Configuring Pi-hole #$i..."
+    if (( i == 1 )); then
+      info "Configuring Pi-hole #$i (PRIMARY)"
+    else
+      info "Configuring Pi-hole #$i (SECONDARY)"
+    fi
 
     prompt "Friendly Name: "
     read -r friendly
@@ -274,50 +297,45 @@ configure_piholes() {
     prompt "Password (leave blank if none): "
     read -r pihole_pass
 
-    # Attempt to validate with curl
     info "Validating Pi-hole #$i with a test auth..."
     local curl_cmd="curl -s -S -k -X POST \"$pihole_url/api/auth\" -H \"Content-Type: application/json\" --data '{\"password\":\"$pihole_pass\"}'"
+    local response=''
+
     if [[ $SIMULATE -eq 1 ]]; then
       info "[SIMULATE] Would run: $curl_cmd"
-      local response='{"session":{"valid":true,"sid":"fake","message":"password correct"}}'
+      response='{"session":{"valid":true,"sid":"fake","message":"password correct"}}'
     else
-      local response
       response=$(eval "$curl_cmd" 2>/dev/null || true)
+    fi
+
+    if [[ -z "$response" ]]; then
+      # No response at all
+      warn "No response from the API. Check your URL:port or SSL settings."
+      warn "We'll still record your entries, but it might not work."
     fi
 
     if echo "$response" | grep -q '"valid":true'; then
       info "Validation successful for $friendly!"
-      if (( i == 1 && primary_done == 0 )); then
-        # Save as primary
-        run_cmd "sudo sed -i 's|^primary_name=.*|primary_name=\"$friendly\"|' \"$ENV_PATH\" || true"
-        run_cmd "sudo sed -i 's|^primary_url=.*|primary_url=\"$pihole_url\"|' \"$ENV_PATH\" || true"
-        run_cmd "sudo sed -i 's|^primary_pass=.*|primary_pass=\"$pihole_pass\"|' \"$ENV_PATH\" || true"
-        primary_done=1
-      else
-        # Save in arrays for secondaries
-        second_names+=("$friendly")
-        second_urls+=("$pihole_url")
-        second_passes+=("$pihole_pass")
-      fi
     else
       warn "Validation failed for Pi-hole #$i. Response: $response"
       warn "We'll still record your entries, but be aware it might not work."
-      if (( i == 1 && primary_done == 0 )); then
-        run_cmd "sudo sed -i 's|^primary_name=.*|primary_name=\"$friendly\"|' \"$ENV_PATH\" || true"
-        run_cmd "sudo sed -i 's|^primary_url=.*|primary_url=\"$pihole_url\"|' \"$ENV_PATH\" || true"
-        run_cmd "sudo sed -i 's|^primary_pass=.*|primary_pass=\"$pihole_pass\"|' \"$ENV_PATH\" || true"
-        primary_done=1
-      else
-        second_names+=("$friendly")
-        second_urls+=("$pihole_url")
-        second_passes+=("$pihole_pass")
-      fi
+    fi
+
+    # Even if validation fails, we still record
+    if (( i == 1 && primary_done == 0 )); then
+      run_cmd "sudo sed -i 's|^primary_name=.*|primary_name=\"$friendly\"|' \"$ENV_PATH\" || true"
+      run_cmd "sudo sed -i 's|^primary_url=.*|primary_url=\"$pihole_url\"|' \"$ENV_PATH\" || true"
+      run_cmd "sudo sed -i 's|^primary_pass=.*|primary_pass=\"$pihole_pass\"|' \"$ENV_PATH\" || true"
+      primary_done=1
+    else
+      second_names+=("$friendly")
+      second_urls+=("$pihole_url")
+      second_passes+=("$pihole_pass")
     fi
   done
 
-  # Write arrays to the .env (secondaries)
+  # If we have more than 1 Pi-hole, we set up secondary arrays
   if (( pi_count > 1 )); then
-    # We'll build a sed command to replace or append these arrays
     local names_str="secondary_names=("
     local urls_str="secondary_urls=("
     local passes_str="secondary_passes=("
@@ -332,7 +350,7 @@ configure_piholes() {
     urls_str+=")"
     passes_str+=")"
 
-    # Attempt to remove old lines and append new ones
+    # Remove old lines, then append
     run_cmd "sudo sed -i '/^secondary_names=/d' \"$ENV_PATH\""
     run_cmd "sudo sed -i '/^secondary_urls=/d' \"$ENV_PATH\""
     run_cmd "sudo sed -i '/^secondary_passes=/d' \"$ENV_PATH\""
