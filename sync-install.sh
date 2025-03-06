@@ -34,6 +34,7 @@
 #   Date            Description
 #   -------------   ------------------------------------------------------------
 #   03-05-2025      0.9.4 Initial Beta Release of Installation Script
+#   03-05-2025      0.9.5 Beta Release Candidate 0.9.5
 #
 # Usage:
 #   ./sync-install.sh [options]
