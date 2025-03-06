@@ -37,14 +37,11 @@ NC="\033[0m"
 # Default Variables
 ###############################################################################
 REPO_URL="https://github.com/TheMegamind/sync-holes.git"
-CLONE_DIR="sync-holes"  # Local clone directory name
-
-# Basic (non-advanced) defaults
+CLONE_DIR="."  # Use current directory (flat repo layout)
 INSTALL_DIR="/usr/local/bin"
 ENV_DIR="/usr/local/etc"
 SIMULATE=0
 ADVANCED=0
-
 CRON_DEFAULT_SCHEDULE="0 3 * * *"  # e.g., run daily at 3:00 AM
 
 ###############################################################################
@@ -114,7 +111,6 @@ warn() {
 }
 
 prompt() {
-  # Print a prompt in cyan
   echo -en "${CYAN}$*${NC}"
 }
 
@@ -166,12 +162,12 @@ fi
 ###############################################################################
 # 3. Clone or Update the Repository
 ###############################################################################
-if [[ -d "$CLONE_DIR" ]]; then
-  info "Directory '$CLONE_DIR' already exists. Pulling latest changes..."
-  run_cmd "cd \"$CLONE_DIR\" && git pull && cd .."
+if [[ -d "$CLONE_DIR/.git" ]]; then
+  info "Directory '$CLONE_DIR' has .git; pulling latest changes..."
+  run_cmd "cd \"$CLONE_DIR\" && git pull"
 else
-  info "Cloning repository from $REPO_URL into '$CLONE_DIR'..."
-  run_cmd "git clone \"$REPO_URL\" \"$CLONE_DIR\""
+  info "Cloning repository from $REPO_URL into current directory..."
+  run_cmd "git clone \"$REPO_URL\" ."
 fi
 
 ###############################################################################
@@ -203,46 +199,157 @@ run_cmd "sudo mkdir -p \"$INSTALL_DIR\""
 run_cmd "sudo mkdir -p \"$ENV_DIR\""
 
 info "Copying sync-holes.sh → $INSTALL_DIR/sync-holes.sh"
-run_cmd "sudo cp \"$CLONE_DIR/sync-holes.sh\" \"$INSTALL_DIR/sync-holes.sh\""
+run_cmd "sudo cp \"sync-holes.sh\" \"$INSTALL_DIR/sync-holes.sh\""
 run_cmd "sudo chmod +x \"$INSTALL_DIR/sync-holes.sh\""
 
 ###############################################################################
-# 6. Back Up Existing sync-holes.env if Present, Then Copy
+# 6. Compare Timestamps & Back Up Existing sync-holes.env if Repo is Newer
 ###############################################################################
 ENV_PATH="$ENV_DIR/sync-holes.env"
 
+LOCAL_MTIME=0
+REPO_MTIME=0
+
 if [[ -f "$ENV_PATH" ]]; then
-  BACKUP_PATH="$ENV_PATH.$(date +%Y%m%d%H%M%S).bak"
-  warn "Found existing sync-holes.env at $ENV_PATH"
-  warn "Backing it up to $BACKUP_PATH"
-  run_cmd "sudo mv \"$ENV_PATH\" \"$BACKUP_PATH\""
+  # local .env exists
+  LOCAL_MTIME=$(stat -c %Y "$ENV_PATH" 2>/dev/null || echo 0)
 fi
 
-info "Copying sync-holes.env → $ENV_DIR"
-run_cmd "sudo cp \"$CLONE_DIR/sync-holes.env\" \"$ENV_PATH\""
+if [[ -f "sync-holes.env" ]]; then
+  REPO_MTIME=$(stat -c %Y "sync-holes.env" 2>/dev/null || echo 0)
+fi
+
+if (( REPO_MTIME > LOCAL_MTIME )); then
+  if [[ -f "$ENV_PATH" ]]; then
+    BACKUP_PATH="$ENV_PATH.$(date +%Y%m%d%H%M%S).bak"
+    warn "Found existing sync-holes.env at $ENV_PATH"
+    warn "Backing it up to $BACKUP_PATH"
+    run_cmd "sudo mv \"$ENV_PATH\" \"$BACKUP_PATH\""
+  fi
+  info "Copying sync-holes.env → $ENV_DIR (newer version detected)"
+  run_cmd "sudo cp \"sync-holes.env\" \"$ENV_PATH\""
+else
+  info "Local sync-holes.env is same or newer than repo's; skipping .env copy."
+fi
 
 ###############################################################################
-# 7. Prompt to Edit .env
+# 6b. If user changed ENV_DIR, create symlink so main script can still find it
+###############################################################################
+DEFAULT_ENV_PATH="/usr/local/etc/sync-holes.env"
+if [[ "$ENV_DIR" != "/usr/local/etc" ]]; then
+  warn "You changed ENV_DIR from the default. We'll create a symlink so sync-holes.sh can still read /usr/local/etc/sync-holes.env."
+  run_cmd "sudo ln -sf \"$ENV_PATH\" \"$DEFAULT_ENV_PATH\""
+fi
+
+###############################################################################
+# 7. Prompt to Edit or Configure .env
 ###############################################################################
 echo ""
-prompt "Do you wish to edit '$ENV_PATH' now to configure you Pi-holes? (y/N): "
-read -r env_edit_choice
+prompt "Do you wish to configure your Pi-hole(s) in '$ENV_PATH' now? (y/N): "
+read -r config_choice
 
-if [[ "$env_edit_choice" =~ ^[Yy]$ ]]; then
-  EDITOR_CMD="${EDITOR:-nano}"
-  if ! command -v "$EDITOR_CMD" >/dev/null 2>&1; then
-    warn "Editor '$EDITOR_CMD' not found. Falling back to 'nano'..."
-    EDITOR_CMD="nano"
+configure_piholes() {
+  # 1) Ask how many Pi-holes
+  prompt "How many Pi-hole instances do you want to configure? "
+  read -r pi_count
+  if ! [[ "$pi_count" =~ ^[0-9]+$ ]]; then
+    warn "Invalid number. Aborting configuration."
+    return
   fi
 
-  if ! command -v "$EDITOR_CMD" >/dev/null 2>&1; then
-    warn "Neither \$EDITOR nor nano is available. Cannot open .env file."
-  else
+  # We'll store the primary in distinct vars; secondaries in arrays
+  local primary_done=0
+  local second_names=()
+  local second_urls=()
+  local second_passes=()
+
+  for (( i=1; i<=$pi_count; i++ )); do
+    echo ""
+    info "Configuring Pi-hole #$i..."
+
+    prompt "Friendly Name: "
+    read -r friendly
+    prompt "URL (e.g. https://192.168.1.10:443): "
+    read -r pihole_url
+    prompt "Password (leave blank if none): "
+    read -r pihole_pass
+
+    # Attempt to validate with curl
+    info "Validating Pi-hole #$i with a test auth..."
+    local curl_cmd="curl -s -S -k -X POST \"$pihole_url/api/auth\" -H \"Content-Type: application/json\" --data '{\"password\":\"$pihole_pass\"}'"
     if [[ $SIMULATE -eq 1 ]]; then
-      info "[SIMULATE] Would open $EDITOR_CMD $ENV_PATH"
+      info "[SIMULATE] Would run: $curl_cmd"
+      local response='{"session":{"valid":true,"sid":"fake","message":"password correct"}}'
     else
-      sudo "$EDITOR_CMD" "$ENV_PATH"
+      local response
+      response=$(eval "$curl_cmd" 2>/dev/null || true)
     fi
+
+    if echo "$response" | grep -q '"valid":true'; then
+      info "Validation successful for $friendly!"
+      if (( i == 1 && primary_done == 0 )); then
+        # Save as primary
+        run_cmd "sudo sed -i 's|^primary_name=.*|primary_name=\"$friendly\"|' \"$ENV_PATH\" || true"
+        run_cmd "sudo sed -i 's|^primary_url=.*|primary_url=\"$pihole_url\"|' \"$ENV_PATH\" || true"
+        run_cmd "sudo sed -i 's|^primary_pass=.*|primary_pass=\"$pihole_pass\"|' \"$ENV_PATH\" || true"
+        primary_done=1
+      else
+        # Save in arrays for secondaries
+        second_names+=("$friendly")
+        second_urls+=("$pihole_url")
+        second_passes+=("$pihole_pass")
+      fi
+    else
+      warn "Validation failed for Pi-hole #$i. Response: $response"
+      warn "We'll still record your entries, but be aware it might not work."
+      if (( i == 1 && primary_done == 0 )); then
+        run_cmd "sudo sed -i 's|^primary_name=.*|primary_name=\"$friendly\"|' \"$ENV_PATH\" || true"
+        run_cmd "sudo sed -i 's|^primary_url=.*|primary_url=\"$pihole_url\"|' \"$ENV_PATH\" || true"
+        run_cmd "sudo sed -i 's|^primary_pass=.*|primary_pass=\"$pihole_pass\"|' \"$ENV_PATH\" || true"
+        primary_done=1
+      else
+        second_names+=("$friendly")
+        second_urls+=("$pihole_url")
+        second_passes+=("$pihole_pass")
+      fi
+    fi
+  done
+
+  # Write arrays to the .env (secondaries)
+  if (( pi_count > 1 )); then
+    # We'll build a sed command to replace or append these arrays
+    local names_str="secondary_names=("
+    local urls_str="secondary_urls=("
+    local passes_str="secondary_passes=("
+
+    for (( j=0; j<${#second_names[@]}; j++ )); do
+      names_str+="\"${second_names[$j]}\" "
+      urls_str+="\"${second_urls[$j]}\" "
+      passes_str+="\"${second_passes[$j]}\" "
+    done
+
+    names_str+=")"
+    urls_str+=")"
+    passes_str+=")"
+
+    # Attempt to remove old lines and append new ones
+    run_cmd "sudo sed -i '/^secondary_names=/d' \"$ENV_PATH\""
+    run_cmd "sudo sed -i '/^secondary_urls=/d' \"$ENV_PATH\""
+    run_cmd "sudo sed -i '/^secondary_passes=/d' \"$ENV_PATH\""
+
+    run_cmd "echo \"$names_str\" | sudo tee -a \"$ENV_PATH\""
+    run_cmd "echo \"$urls_str\" | sudo tee -a \"$ENV_PATH\""
+    run_cmd "echo \"$passes_str\" | sudo tee -a \"$ENV_PATH\""
+  fi
+
+  info "Done configuring Pi-holes!"
+}
+
+if [[ "$config_choice" =~ ^[Yy]$ ]]; then
+  if [[ $SIMULATE -eq 1 ]]; then
+    info "[SIMULATE] Would configure Pi-holes by prompting user..."
+  else
+    configure_piholes
   fi
 fi
 
