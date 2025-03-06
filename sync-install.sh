@@ -1,10 +1,39 @@
-#!/usr/bin/env bash
+#!/bin/bash
+
 #
-# sync-install.sh
-# ---------------
-# Installs sync-holes.sh from https://github.com/TheMegamind/sync-holes
-# with optional advanced features, simulation mode, Pi-hole version checks,
-# color-coded prompts, cron duplication logic, and a single symlink block.
+# ===============================================================================
+#                            sync-install.sh
+#
+#      Installs sync-holes.sh from https://github.com/TheMegamind/sync-holes
+#     with optional advanced features, simulation mode, Pi-hole version checks,
+#              color-coded prompts, and cron duplication logic.
+# ===============================================================================
+#
+# MIT License
+#
+# (c) 2025 by Megamind
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+#
+#   Date            Description
+#   -------------   ------------------------------------------------------------
+#   03-05-2025      0.9.4 Initial Beta Release of Installation Script
 #
 # Usage:
 #   ./sync-install.sh [options]
@@ -23,9 +52,9 @@
 # -----------------------------------------------------------------------------
 set -e
 
-###############################################################################
+#==============================================================================
 # Color Variables
-###############################################################################
+#==============================================================================
 YELLOW="\033[1;33m"
 GREEN="\033[1;32m"
 RED="\033[1;31m"
@@ -33,9 +62,9 @@ BLUE="\033[1;34m"
 CYAN="\033[1;36m"
 NC="\033[0m"
 
-###############################################################################
+#==============================================================================
 # Default Variables
-###############################################################################
+#==============================================================================
 REPO_URL="https://github.com/TheMegamind/sync-holes.git"
 CLONE_DIR="."  
 INSTALL_DIR="/usr/local/bin"
@@ -45,9 +74,9 @@ ADVANCED=0
 
 CRON_DEFAULT_SCHEDULE="0 3 * * *"  # e.g., run daily at 3:00 AM
 
-###############################################################################
+#==============================================================================
 # Helper: Print usage
-###############################################################################
+#==============================================================================
 usage() {
   cat <<EOF
 Usage: $(basename "$0") [options]
@@ -66,9 +95,9 @@ EOF
   exit 1
 }
 
-###############################################################################
+#==============================================================================
 # Parse Command-Line Arguments
-###############################################################################
+#==============================================================================
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -s|--simulate)
@@ -89,9 +118,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-###############################################################################
+#==============================================================================
 # run_cmd: Wrapper to run commands or simulate
-###############################################################################
+#==============================================================================
 run_cmd() {
   if [[ $SIMULATE -eq 1 ]]; then
     echo -e "[${YELLOW}SIMULATE${NC}] $*"
@@ -100,9 +129,9 @@ run_cmd() {
   fi
 }
 
-###############################################################################
+#==============================================================================
 # Logging/Prompt Functions
-###############################################################################
+#==============================================================================
 info() {
   echo -e "[${GREEN}INFO${NC}] $*"
 }
@@ -116,9 +145,9 @@ prompt() {
   echo -en "${CYAN}$*${NC}"
 }
 
-###############################################################################
+#==============================================================================
 # 1. Check for Dependencies
-###############################################################################
+#==============================================================================
 info "Checking for necessary packages: git, curl, jq..."
 run_cmd "sudo apt-get update -y"
 run_cmd "sudo apt-get install -y git curl jq"
@@ -129,9 +158,9 @@ if (( BASH_VERSION_MAJOR < 4 )); then
   warn "You appear to be running an older Bash (<4). Arrays may not work."
 fi
 
-###############################################################################
+#==============================================================================
 # 2. Check Pi-hole Version
-###############################################################################
+#==============================================================================
 info "Checking Pi-hole version..."
 
 if command -v pihole >/dev/null 2>&1; then
@@ -161,9 +190,9 @@ else
   fi
 fi
 
-###############################################################################
+#==============================================================================
 # 3. Clone or Update the Repository
-###############################################################################
+#==============================================================================
 if [[ -d "$CLONE_DIR/.git" ]]; then
   info "Directory '$CLONE_DIR' has .git; pulling latest changes..."
   run_cmd "cd \"$CLONE_DIR\" && git pull"
@@ -172,9 +201,9 @@ else
   run_cmd "git clone \"$REPO_URL\" ."
 fi
 
-###############################################################################
+#==============================================================================
 # 4. Basic vs Advanced Install
-###############################################################################
+#==============================================================================
 if [[ $ADVANCED -eq 1 ]]; then
   info "Entering ADVANCED install mode..."
 
@@ -209,9 +238,9 @@ else
   info "BASIC install mode: using default directories ($INSTALL_DIR, $ENV_DIR)."
 fi
 
-###############################################################################
+#==============================================================================
 # 5. Create Directories & Copy Script
-###############################################################################
+#==============================================================================
 info "Creating target directories if needed..."
 run_cmd "sudo mkdir -p \"$INSTALL_DIR\""
 run_cmd "sudo mkdir -p \"$ENV_DIR\""
@@ -220,9 +249,9 @@ info "Copying sync-holes.sh → $INSTALL_DIR/sync-holes.sh"
 run_cmd "sudo cp \"sync-holes.sh\" \"$INSTALL_DIR/sync-holes.sh\""
 run_cmd "sudo chmod +x \"$INSTALL_DIR/sync-holes.sh\""
 
-###############################################################################
+#==============================================================================
 # 6. Compare Timestamps & Back Up Existing sync-holes.env if Repo is Newer
-###############################################################################
+#==============================================================================
 ENV_PATH="$ENV_DIR/sync-holes.env"
 
 LOCAL_MTIME=0
@@ -249,18 +278,18 @@ else
   info "Local sync-holes.env is same or newer than repo's; skipping .env copy."
 fi
 
-###############################################################################
+#==============================================================================
 # 6b. If user changed ENV_DIR, create symlink so main script can still find it
-###############################################################################
+#==============================================================================
 DEFAULT_ENV_PATH="/usr/local/etc/sync-holes.env"
 if [[ "$ENV_DIR" != "/usr/local/etc" ]]; then
   warn "You changed ENV_DIR from the default. We'll create a symlink so sync-holes.sh can still read /usr/local/etc/sync-holes.env."
   run_cmd "sudo ln -sf \"$ENV_PATH\" \"$DEFAULT_ENV_PATH\""
 fi
 
-###############################################################################
+#==============================================================================
 # 7. Prompt to Edit or Configure .env
-###############################################################################
+#==============================================================================
 echo ""
 prompt "Do you wish to configure your Pi-hole(s) in '$ENV_PATH' now? (y/N): "
 read -r config_choice
@@ -371,9 +400,9 @@ if [[ "$config_choice" =~ ^[Yy]$ ]]; then
   fi
 fi
 
-###############################################################################
+#==============================================================================
 # 8. Symlink Creation
-###############################################################################
+#==============================================================================
 if [[ $ADVANCED -eq 1 ]]; then
   # In advanced mode, prompt user for symlink creation
   echo ""
@@ -389,9 +418,9 @@ else
   run_cmd "sudo ln -sf \"$INSTALL_DIR/sync-holes.sh\" /usr/local/bin/sync-holes"
 fi
 
-###############################################################################
+#==============================================================================
 # 9. Cron Option (with Duplicate Check)
-###############################################################################
+#==============================================================================
 echo ""
 prompt "Do you want to schedule sync-holes via cron? (y/N): "
 read -r cron_choice
@@ -464,16 +493,16 @@ $CRON_LINE"
   fi
 fi
 
-###############################################################################
+#==============================================================================
 # 10. Warn about system directories
-###############################################################################
+#==============================================================================
 if [[ "$INSTALL_DIR" =~ ^/usr/ || "$ENV_DIR" =~ ^/usr/ ]]; then
   warn "You installed files in a system directory. Future updates or modifications may require sudo privileges."
 fi
 
-###############################################################################
+#==============================================================================
 # 11. Final Message
-###############################################################################
+#==============================================================================
 echo ""
 if [[ $SIMULATE -eq 1 ]]; then
   info "Installation simulated. No changes were made."
