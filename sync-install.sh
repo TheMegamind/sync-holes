@@ -273,7 +273,7 @@ if (( REPO_MTIME > LOCAL_MTIME )); then
   if [[ -d .git ]]; then
     last_commit_msg=$(git log -1 --pretty=format:"%B" -- sync-holes.env 2>/dev/null || true)
     if [[ -n "$last_commit_msg" ]]; then
-      info "Latest commit message for sync-holes.env (for your reference):"
+      warn "Latest commit message for sync-holes.env (for your reference):"
       info "$last_commit_msg"
     fi
   fi
