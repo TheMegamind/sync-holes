@@ -404,6 +404,7 @@ if (( pi_count > 1 )); then
 fi
 
 info "Done configuring Pi-holes!"
+}
 
 if [[ "$config_choice" =~ ^[Yy]$ ]]; then
   if [[ $SIMULATE -eq 1 ]]; then
