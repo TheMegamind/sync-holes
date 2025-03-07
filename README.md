@@ -22,7 +22,8 @@
   - *Requires updated sync-holes.env*  
   - *Note: Default for import_config changed to false*  
 - **03-05-2025** → 0.9.5 Added Command-Line Override for Import Settings 
-- **03-06-2025** → Initial Release of Automated Installer   
+- **03-06-2025** → Initial Release of Automated Installer
+- **03-07-2025** → Mostly Minor tweaks to install based on user feedback.     
 
 ## Prerequisites
 
