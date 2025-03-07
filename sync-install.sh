@@ -252,6 +252,8 @@ run_cmd "sudo chmod +x \"$INSTALL_DIR/sync-holes.sh\""
 
 #==============================================================================
 # 6. Compare Timestamps & Back Up Existing sync-holes.env if Repo is Newer
+#    Now also prompt the user whether to overwrite or keep the old .env, and
+#    display the last commit message if available.
 #==============================================================================
 ENV_PATH="$ENV_DIR/sync-holes.env"
 
@@ -267,14 +269,30 @@ if [[ -f "sync-holes.env" ]]; then
 fi
 
 if (( REPO_MTIME > LOCAL_MTIME )); then
-  if [[ -f "$ENV_PATH" ]]; then
-    BACKUP_PATH="$ENV_PATH.$(date +%Y%m%d%H%M%S).bak"
-    warn "Found existing sync-holes.env at $ENV_PATH"
-    warn "Backing it up to $BACKUP_PATH"
-    run_cmd "sudo mv \"$ENV_PATH\" \"$BACKUP_PATH\""
+  # Attempt to retrieve last commit message for sync-holes.env, if .git is present
+  if [[ -d .git ]]; then
+    last_commit_msg=$(git log -1 --pretty=format:"%B" -- sync-holes.env 2>/dev/null || true)
+    if [[ -n "$last_commit_msg" ]]; then
+      info "Latest commit message for sync-holes.env (for your reference):"
+      info "$last_commit_msg"
+    fi
   fi
-  info "Copying sync-holes.env → $ENV_DIR (newer version detected)"
-  run_cmd "sudo cp \"sync-holes.env\" \"$ENV_PATH\""
+
+  # Prompt user to overwrite or keep old
+  prompt "A newer sync-holes.env is available. Overwrite your existing .env? (O=Overwrite, K=Keep) [O/K]: "
+  read -r env_choice
+  if [[ "$env_choice" =~ ^[Oo]$ ]]; then
+    if [[ -f "$ENV_PATH" ]]; then
+      BACKUP_PATH="$ENV_PATH.$(date +%Y%m%d%H%M%S).bak"
+      warn "Found existing sync-holes.env at $ENV_PATH"
+      warn "Backing it up to $BACKUP_PATH"
+      run_cmd "sudo mv \"$ENV_PATH\" \"$BACKUP_PATH\""
+    fi
+    info "Copying sync-holes.env → $ENV_DIR (newer version detected)"
+    run_cmd "sudo cp \"sync-holes.env\" \"$ENV_PATH\""
+  else
+    info "Keeping your existing .env. Skipping copy."
+  fi
 else
   info "Local sync-holes.env is same or newer than repo's; skipping .env copy."
 fi
@@ -298,6 +316,10 @@ read -r config_choice
 configure_piholes() {
   info "Note: Pi-hole #1 is the PRIMARY/SOURCE. All others are SECONDARY/TARGETS."
   info "By default, Pi-hole uses port 443 for its REST API unless changed."
+
+  # DELETE existing session files to avoid mismatches
+  info "Removing any existing session files to avoid stale or mismatched sessions..."
+  run_cmd "sudo rm -f /tmp/primary-session.json /tmp/secondary-session_*.json 2>/dev/null || true"
 
   prompt "How many Pi-hole instances do you want to configure? "
   read -r pi_count
@@ -412,6 +434,9 @@ if [[ "$config_choice" =~ ^[Yy]$ ]]; then
   else
     configure_piholes
   fi
+else
+  # NEW: Let user know "No" means existing config remains
+  info "Skipping Pi-hole configuration. Any existing Pi-hole settings in $ENV_PATH will remain unchanged."
 fi
 
 #==============================================================================
