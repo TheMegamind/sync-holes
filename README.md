@@ -1,11 +1,15 @@
-# sync-holes.sh README
+<h2 align="center">Synchronize data and settings from a primary Pi-hole® to multiple secondary Pi-hole® instances via the Pi-hole® v6 REST API.</h2>
 
-## Overview
+<div align="center">
+  <img src="https://github.com/TheMegamind/sync-holes/blob/main/assets/synchronize.png" alt="readme header image" width="300">
+</div>
+  
+<h6 align="center">**PLEASE NOTE**: This project is independently-maintained. The maintainer is not affiliated with the Official Pi-hole® Project at https://github.com/pi-hole in any way. Pi-hole® and the Pi-hole® logo are registered trademarks of Pi-hole LLC. </h6>
 
-`sync-holes.sh` synchronizes the Teleporter settings from a primary Pi-hole to multiple secondary Pi-hole instances via the Pi-hole REST API. 
+---
 
-**Features:**
-- Easy, automated script-based installation (Docker not required)
+## Features
+- Easy, automated script-based installation (for non-Docker users)
 - Environment-based configuration via a `.env` file.
 - Intelligent session management (re-authenticates only when needed).
 - Configurable SSL support for self‑signed certificates.
@@ -14,28 +18,21 @@
 - Detailed logging with configurable size, rotation, and optional data masking.
 - **Optional** Docker Installation (*Pending*)
 
-**History:**
-- **01-05-2025** → Initial Beta Release  
-- **01-19-2025** → 0.9.1 Fix Log Rotation  
-- **02-22-2025** → 0.9.2 Fix Import Options Handling  
-- **03-03-2025** → 0.9.3 Synchronize > 2 Pi-holes  
-  - *Requires updated sync-holes.env*  
-  - *Note: Default for import_config changed to false*  
-- **03-05-2025** → 0.9.5 Added Command-Line Override for Import Settings 
-- **03-06-2025** → Initial Release of Automated Installer
-- **03-07-2025** → Mostly Minor tweaks to install based on user feedback.     
+---
 
 ## Prerequisites
 
 ### Software Dependencies
-- **Pi-hole 6** (required for API compatibility)
+- **Pi-hole® 6** (required for API compatibility)
 - **jq** – for JSON parsing
 - **curl** – for API requests
 - **Bash 4 (or later)** – to properly handle arrays
 
+---
+
 ## Installation
 
-### Recommended: Use the Automated Installer
+### Use the Automated Installer (Recommended!)
 - Clone or Download the Repository
    ```bash
    git clone https://github.com/TheMegamind/sync-holes.git
@@ -49,7 +46,7 @@
 
 Running `./sync-install.sh` performs a standard installation, automatically placing sync-holes.sh in `/usr/local/bin`, copying the .env file to `/usr/local/etc`, and creating a `/usr/local/bin/sync-holes` symlink.
 
-The script checks for required dependencies, verifies Pi-hole v6, and offers to set up a cron job for automatic synchronization. If you need assistance creating a cron schedule string, visit [Crontab.guru](https://crontab.guru).
+The script checks for required dependencies, verifies Pi-hole® v6, and offers to set up a cron job for automatic synchronization. If you need assistance creating a cron schedule string, visit [Crontab.guru](https://crontab.guru).
 
 
 ### Optional Advanced Installation
@@ -101,7 +98,7 @@ The script checks for required dependencies, verifies Pi-hole v6, and offers to 
    cp sync-holes.env /usr/local/etc/
    chmod +x /usr/local/bin/sync-holes.sh
 
-- Edit the .env File and configure the environment variables (primary/secondary Pi-hole details, etc.) in `/usr/local/etc/sync-holes.env`.
+- Edit the .env File and configure the environment variables (primary/secondary Pi-hole® details, etc.) in `/usr/local/etc/sync-holes.env`.
 - *Note: The user should also handle log directory permissions if they want logs in /var/log/*
 
 - (Optional) Create a Symlink
@@ -116,16 +113,22 @@ The script checks for required dependencies, verifies Pi-hole v6, and offers to 
    ```bash
    sync-holes
 
-Any of these methods will achieve the same result. The automated script is recommended for ease of setup, automatic backups, Pi-hole version checks, and optional cron configuration.
+Any of these methods will achieve the same result. The automated script is recommended for ease of setup, automatic backups, Pi-hole® version checks, and optional cron configuration.
 
-## Configuration: `.env` File
+---
 
-The `.env` file contains the following configuration variables. Update these to match your Pi-hole instances.
+## Configuration
 
-### Primary Pi-hole (Source)
+- The `.env` file contains the following configuration variables. The installation script will help you configure the required options. If you want to make further changes, the configuration file is located at `/usr/local/etc/sync-holes.env`. Simply Use your favorite editor to make any modifications, for example:
+   ```bash
+  sudo nano /usr/local/etc/sync-holes.env
+
+- **Note**: If you used the advanced installer option and elected to change the default directory for the configuration file, you may still use the above command, as that directory contains a symlink to the actual file. 
+
+### Primary Pi-hole® (Source)
 - `primary_name`: Friendly name for the primary Pi-hole.
 - `primary_url`: URL or IP address of the primary Pi-hole.
-- `primary_pass`: Password for the primary Pi-hole (if any).
+- `primary_pass`: Password for the primary Pi-hole® (if any).
 
 ### Secondary Pi-holes (Targets)
 
@@ -147,7 +150,9 @@ These variables control which settings are imported by default. Set each to true
 
 `import_config`, `import_dhcp_leases`, `import_gravity_group`, `import_gravity_adlist`, `import_gravity_adlist_by_group`, `import_gravity_domainlist`, `import_gravity_domainlist_by_group`, `import_gravity_client`, `import_gravity_client_by_group`
 
-**Note**: By default, 'import_config' is initially set to false in `sync-holes.env`. Synchronizing configuration setting may cause issues with some installations (for example, if one Pi-hole uses Ethernet and the other Wi-Fi).
+**Note**: By default, 'import_config' is initially set to false in `sync-holes.env`. Synchronizing configuration settings may cause issues with some installations (for example, if one Pi-hole® is assigned to Ethernet and the other Wi-Fi).
+
+---
 
 ## Usage
 
@@ -183,6 +188,7 @@ These variables control which settings are imported by default. Set each to true
 7. **Run with import settings overridden by a JSON file**
    ```bash
     ./sync-holes.sh -F /path/to/import_settings.json
+   
 ### Reminder:
 - Depending on your system configuration, you may need to run the script with sudo to access protected directories. For example:
    ```bash
@@ -192,6 +198,8 @@ These variables control which settings are imported by default. Set each to true
 ##### Note:
 - Any import settings keys omitted from the override JSON will assume their default values from the .env file.
 - For example, if you override only `"dhcp_leases": false` in your JSON, only that key will change while all others remain unchanged.
+
+---
 
 ## Logging
 
@@ -204,19 +212,16 @@ These defaults may be modified in the .env file
 
 ## Troubleshooting
 
-- Most errors that have been reported to date have been the result of syntax or other errors in the user's `sync-holes.env`. Please review entries carefully. 
+- Most errors that were reported in beta were the result of syntax or other errors in the user's `sync-holes.env`. Please review entries carefully. 
 - Errors during execution are logged and displayed, sometimes with a suggested fix. You can review any errors by:
   - Checking the log file, or 
   - Running `sync-holes -v` to output the log to the screen.
   - Running `sync-holes -v -u` will log to the screen and unmask any sensitive data
 - Any curl errors are printed to the screen and included in the log. The `curl_error.log` that is deleted during cleanup is a placeholder and *does not contain any information that hasn't already been logged*.
+- If you incur an error and need help, please create an issue in the reposity and **include a complete verbose log.** 
+
+---
  
 ## License
 
 This project is licensed under the MIT License. See the script header for details.
-
-## Disclaimer
-
-**Pi-hole®**  and the Pi-hole logo are registered trademarks of **Pi-hole LLC**.
-
-This project is independently-maintained. The maintainer is not affiliated with the [Official Pi-hole Project](https://github.com/pi-hole) in any way.
