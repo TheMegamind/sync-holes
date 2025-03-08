@@ -41,17 +41,16 @@
    git clone https://github.com/TheMegamind/sync-holes.git
    cd sync-holes
 
-- Make the Installer Executable
-   ```bash
-   chmod +x sync-install.sh
-
 - Run the Installer 
    ```bash
    ./sync-install.sh
 
-This performs a standard installation, automatically placing sync-holes.sh in `/usr/local/bin`, copying the .env file to `/usr/local/etc`, and creating a `/usr/local/bin/sync-holes` symlink.
+**Note**: If the above command produces a “Permission denied” error, run: `bash sync-install.sh` instead.
+
+Running `./sync-install.sh` performs a standard installation, automatically placing sync-holes.sh in `/usr/local/bin`, copying the .env file to `/usr/local/etc`, and creating a `/usr/local/bin/sync-holes` symlink.
 
 The script checks for required dependencies, verifies Pi-hole v6, and offers to set up a cron job for automatic synchronization. If you need assistance creating a cron schedule string, visit [Crontab.guru](https://crontab.guru).
+
 
 ### Optional Advanced Installation
 - If you want to change install directories or skip the auto-symlink, run:
