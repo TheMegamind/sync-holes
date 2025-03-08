@@ -453,7 +453,7 @@ if [[ $ADVANCED -eq 1 ]]; then
   fi
 else
   # In basic mode, always create the symlink without prompting
-  info "Basic mode: creating symlink /usr/local/bin/sync-holes → $INSTALL_DIR/sync-holes.sh"
+  info "Creating symlink /usr/local/bin/sync-holes → $INSTALL_DIR/sync-holes.sh"
   run_cmd "sudo ln -sf \"$INSTALL_DIR/sync-holes.sh\" /usr/local/bin/sync-holes"
 fi
 
