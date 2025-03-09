@@ -28,6 +28,8 @@
 - **curl** – for API requests
 - **Bash 4 (or later)** – to properly handle arrays
 
+The installer script will check for the dependencies and give the user to install or updates them if needed.  
+
 ---
 
 ## Installation
