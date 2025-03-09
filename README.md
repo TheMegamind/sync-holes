@@ -1,10 +1,10 @@
-<h2 align="center">Synchronize data and settings from a primary Pi-hole® to multiple secondary Pi-hole® instances via the Pi-hole® v6 REST API.</h2>
+<h2 align="center">Synchronize data and settings from a primary Pi-hole® to multiple secondary Pi-hole® instances via the Pi-hole v6 REST API.</h2>
 
 <div align="center">
   <img src="https://github.com/TheMegamind/sync-holes/blob/main/assets/synchronize.png" alt="readme header image" width="300">
 </div>
   
-<h6 align="center">**NOTE**: This project is independently-maintained. The maintainer is not affiliated with the Official Pi-hole® Project at https://github.com/pi-hole in any way. Pi-hole® and the Pi-hole® logo are registered trademarks of Pi-hole LLC. </h6>
+<h6 align="center">**NOTE**: This project is independently-maintained. The maintainer is not affiliated with the Official Pi-hole® Project at https://github.com/pi-hole in any way. Pi-hole® and the Pi-hole logo are registered trademarks of Pi-hole LLC. </h6>
 
 ---
 
@@ -20,7 +20,7 @@
   - [After Installation](#after-installation)
   - [Manual Installation (Advanced Users Only)](#manual-installation-advanced-users-only)
 - [Configuration](#configuration)
-  - [Primary Pi-hole® (Source)](#primary-pihole-source)
+  - [Primary Pi-hole (Source)](#primary-pihole-source)
   - [Secondary Pi-holes (Targets)](#secondary-pi-holes-targets)
   - [Optional Settings](#optional-settings)
   - [Import Settings](#import-settings)
@@ -74,7 +74,7 @@ The installer script will check for the required dependencies and prompt the use
 
 Running `./sync-install.sh` performs a standard installation, automatically placing sync-holes.sh in `/usr/local/bin`, copying the .env file to `/usr/local/etc`, and creating a `/usr/local/bin/sync-holes` symlink.
 
-The script checks for required dependencies, verifies Pi-hole® v6, and offers to set up a cron job for automatic synchronization. If you need assistance creating a cron schedule string, visit [Crontab.guru](https://crontab.guru).
+The script checks for required dependencies, verifies Pi-hole v6, and offers to set up a cron job for automatic synchronization. If you need assistance creating a cron schedule string, visit [Crontab.guru](https://crontab.guru).
 
 
 ### Optional Advanced Installation
@@ -127,7 +127,7 @@ The script checks for required dependencies, verifies Pi-hole® v6, and offers t
    cp sync-holes.env /usr/local/etc/
    chmod +x /usr/local/bin/sync-holes.sh
 
-- Edit the .env File and configure the environment variables (primary/secondary Pi-hole® details, etc.) in `/usr/local/etc/sync-holes.env`.
+- Edit the .env File and configure the environment variables (primary/secondary Pi-hole details, etc.) in `/usr/local/etc/sync-holes.env`.
 - Note: The user may need to address log directory permissions if they want logs in /var/log/
 
 - (Optional) Create a Symlink
@@ -142,7 +142,7 @@ The script checks for required dependencies, verifies Pi-hole® v6, and offers t
    ```bash
    sync-holes
 
-Any of these methods will achieve the same result. The automated script is recommended for ease of setup, automatic backups, Pi-hole® version checks, and optional cron configuration.
+Any of these methods will achieve the same result. The automated script is recommended for ease of setup, automatic backups, Pi-hole version checks, and optional cron configuration.
 
 ---
 
@@ -155,10 +155,10 @@ Any of these methods will achieve the same result. The automated script is recom
 - **Note 1**: If you used the advanced installer option and elected to change the default directory for the configuration file, you may still use the above command, as that directory contains a symlink to the actual file.
 - **Note 2**: The installer inserts secondary arrays below the comment line: `** DO NOT REMOVE OR MODIFY THIS LINE — INSTALL SCRIPT INSERTS DATA BELOW **` Do not modify that line if you wish to re-run the installer and manage secondaries.
 
-### Primary Pi-hole® (Source)
+### Primary Pi-hole (Source)
 - `primary_name`: Friendly name for the primary Pi-hole.
 - `primary_url`: URL or IP address of the primary Pi-hole.
-- `primary_pass`: Password for the primary Pi-hole® (if any).
+- `primary_pass`: Password for the primary Pi-hole (if any).
 
 ### Secondary Pi-holes (Targets)
 
@@ -180,7 +180,7 @@ These variables control which settings are imported by default. Set each to true
 
 `import_config`, `import_dhcp_leases`, `import_gravity_group`, `import_gravity_adlist`, `import_gravity_adlist_by_group`, `import_gravity_domainlist`, `import_gravity_domainlist_by_group`, `import_gravity_client`, `import_gravity_client_by_group`
 
-**Note**: By default, 'import_config' is initially set to false in `sync-holes.env`. Synchronizing configuration settings may cause issues with some installations (for example, if one Pi-hole® is assigned to Ethernet and the other Wi-Fi).
+**Note**: By default, 'import_config' is initially set to false in `sync-holes.env`. Synchronizing configuration settings may cause issues with some installations (for example, if one Pi-hole is assigned to Ethernet and the other Wi-Fi).
 
 ---
 
