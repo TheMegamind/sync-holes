@@ -220,7 +220,7 @@ These defaults may be modified in the .env file
   - Running `sync-holes -v` to output the log to the screen.
   - Running `sync-holes -v -u` will log to the screen and unmask any sensitive data
 - Any curl errors are printed to the screen and included in the log. The `curl_error.log` that is deleted during cleanup is a placeholder and *does not contain any information that hasn't already been logged*.
-- If you encounter an error and need help, please create an issue in the reposity and **include a complete verbose log.** 
+- If you encounter an error and need help, please create an issue in the repositoryy and **include a complete verbose log** of the session where the error occurred. 
 
 ---
  
