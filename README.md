@@ -8,6 +8,32 @@
 
 ---
 
+## Table of Contents
+
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+  - [Software Dependencies](#software-dependencies)
+- [Installation](#installation)
+  - [Use the Automated Installer (Recommended!)](#use-the-automated-installer-recommended)
+  - [Optional Advanced Installation](#optional-advanced-installation)
+  - [Simulation Mode](#simulation-mode)
+  - [After Installation](#after-installation)
+  - [Manual Installation (Advanced Users Only)](#manual-installation-advanced-users-only)
+- [Configuration](#configuration)
+  - [Primary Pi-hole® (Source)](#primary-pihole-source)
+  - [Secondary Pi-holes (Targets)](#secondary-pi-holes-targets)
+  - [Optional Settings](#optional-settings)
+  - [Import Settings](#import-settings)
+- [Usage](#usage)
+  - [Basic Syntax](#basic-syntax)
+  - [Options](#options)
+  - [Examples](#examples)
+- [Logging](#logging)
+- [Troubleshooting](#troubleshooting)
+- [License](#license)
+
+---
+
 ## Features
 - Easy, automated script-based installation (for non-Docker users)
 - Environment-based configuration via a `.env` file.
@@ -28,7 +54,7 @@
 - **curl** – for API requests
 - **Bash 4 (or later)** – to properly handle arrays
 
-The installer script will check for the dependencies and give the user to install or updates them if needed.  
+The installer script will check for the required dependencies and prompt the user to install or update them as needed.  
 
 ---
 
@@ -175,19 +201,19 @@ These variables control which settings are imported by default. Set each to true
    ```bash
    ./sync-holes.sh
 
-3. **Run with verbose output**
+2. **Run with verbose output**
    ```bash
    ./sync-holes.sh -v
 
-4. **Run without masking sensitive data**
+3. **Run without masking sensitive data**
    ```bash
    ./sync-holes.sh -u
 
-5. **Run with import settings overridden inline via JSON**
+4. **Run with import settings overridden inline via JSON**
    ```bash
    ./sync-holes.sh -I '{"config": false,"dhcp_leases": false,"gravity": {"group": true,"adlist": false,"adlist_by_group": true,"domainlist": true,"domainlist_by_group": true,"client": true,"client_by_group": false}}'
 
-7. **Run with import settings overridden by a JSON file**
+6. **Run with import settings overridden by a JSON file**
    ```bash
     ./sync-holes.sh -F /path/to/import_settings.json
    
@@ -220,7 +246,7 @@ These defaults may be modified in the .env file
   - Running `sync-holes -v` to output the log to the screen.
   - Running `sync-holes -v -u` will log to the screen and unmask any sensitive data
 - Any curl errors are printed to the screen and included in the log. The `curl_error.log` that is deleted during cleanup is a placeholder and *does not contain any information that hasn't already been logged*.
-- If you encounter an error and need help, please create an issue in the repositoryy and **include a complete verbose log** of the session where the error occurred. 
+- If you encounter an error and need help, please create an issue in the repository and **include a complete verbose log** of the session where the error occurred. 
 
 ---
  
