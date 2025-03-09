@@ -38,7 +38,7 @@
 #   03-03-2025      0.9.3   Synchronize > 2 Pi-holes
 #   03-04-2025      0.9.4   Override Import Settings via CLI
 #   03-06-2025      0.9.5   Beta Release Candidate 0.9.5
-#   03-09-2025      0.9.5.2 Change dhcp_leases default to false
+#   03-09-2025      0.9.5.2 dhcp_leases default to false, use /usr/bin/env bash
 #
 # ===============================================================================
 #
