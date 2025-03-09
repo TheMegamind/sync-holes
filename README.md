@@ -49,7 +49,7 @@
 ## Prerequisites
 
 ### Software Dependencies
-- **Pi-hole® 6** (required for API compatibility)
+- **Pi-hole® v6** (required for API compatibility)
 - **jq** – for JSON parsing
 - **curl** – for API requests
 - **Bash 4 (or later)** – to properly handle arrays
@@ -115,7 +115,8 @@ The script checks for required dependencies, verifies Pi-hole® v6, and offers t
 
 (Or whichever directory you chose in advanced mode.)
 
-- If you did not configure a cron job during install, you can re-run sync-install.sh or manually set one up
+- If you did not configure a cron job during install, you can re-run sync-install.sh or manually set one up.
+- **Re-running the Installer**: If you run sync-install.sh again and choose not to reconfigure your Pi-hole instances, your existing .env data remains intact.
 
 ### Manual Installation (Advanced Users Only)
 - Download sync-holes.sh and sync-holes.env
@@ -151,7 +152,8 @@ Any of these methods will achieve the same result. The automated script is recom
    ```bash
   sudo nano /usr/local/etc/sync-holes.env
 
-- **Note**: If you used the advanced installer option and elected to change the default directory for the configuration file, you may still use the above command, as that directory contains a symlink to the actual file. 
+- **Note 1**: If you used the advanced installer option and elected to change the default directory for the configuration file, you may still use the above command, as that directory contains a symlink to the actual file.
+- **Note 2**: The installer inserts secondary arrays below the comment line: `** DO NOT REMOVE OR MODIFY THIS LINE — INSTALL SCRIPT INSERTS DATA BELOW **` Do not modify that line if you wish to re-run the installer and manage secondaries.
 
 ### Primary Pi-hole® (Source)
 - `primary_name`: Friendly name for the primary Pi-hole.
