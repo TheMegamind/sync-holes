@@ -4,7 +4,7 @@
   <img src="https://github.com/TheMegamind/sync-holes/blob/main/assets/synchronize.png" alt="readme header image" width="300">
 </div>
   
-<h6 align="center">**PLEASE NOTE**: This project is independently-maintained. The maintainer is not affiliated with the Official Pi-hole® Project at https://github.com/pi-hole in any way. Pi-hole® and the Pi-hole® logo are registered trademarks of Pi-hole LLC. </h6>
+<h6 align="center">**NOTE**: This project is independently-maintained. The maintainer is not affiliated with the Official Pi-hole® Project at https://github.com/pi-hole in any way. Pi-hole® and the Pi-hole® logo are registered trademarks of Pi-hole LLC. </h6>
 
 ---
 
@@ -42,7 +42,7 @@
    ```bash
    ./sync-install.sh
 
-**Note**: If the above command produces a “Permission denied” error, run: `bash sync-install.sh` instead.
+**Note**: If the above command produces a “Permission denied” error, run `bash sync-install.sh` instead.
 
 Running `./sync-install.sh` performs a standard installation, automatically placing sync-holes.sh in `/usr/local/bin`, copying the .env file to `/usr/local/etc`, and creating a `/usr/local/bin/sync-holes` symlink.
 
@@ -99,7 +99,7 @@ The script checks for required dependencies, verifies Pi-hole® v6, and offers t
    chmod +x /usr/local/bin/sync-holes.sh
 
 - Edit the .env File and configure the environment variables (primary/secondary Pi-hole® details, etc.) in `/usr/local/etc/sync-holes.env`.
-- *Note: The user should also handle log directory permissions if they want logs in /var/log/*
+- Note: The user may need to address log directory permissions if they want logs in /var/log/
 
 - (Optional) Create a Symlink
    ```bash
@@ -119,7 +119,7 @@ Any of these methods will achieve the same result. The automated script is recom
 
 ## Configuration
 
-- The `.env` file contains the following configuration variables. The installation script will help you configure the required options. If you want to make further changes, the configuration file is located at `/usr/local/etc/sync-holes.env`. Simply Use your favorite editor to make any modifications, for example:
+- While the installation script will help you configure the required options, there are additional options (described further below) that you can modify to suit your preferences in the configuration file, `synch-holes.env` By default this file is located at `/usr/local/etc/sync-holes.env`. Simply use your favorite editor to make any modifications, for example:
    ```bash
   sudo nano /usr/local/etc/sync-holes.env
 
@@ -218,10 +218,18 @@ These defaults may be modified in the .env file
   - Running `sync-holes -v` to output the log to the screen.
   - Running `sync-holes -v -u` will log to the screen and unmask any sensitive data
 - Any curl errors are printed to the screen and included in the log. The `curl_error.log` that is deleted during cleanup is a placeholder and *does not contain any information that hasn't already been logged*.
-- If you incur an error and need help, please create an issue in the reposity and **include a complete verbose log.** 
+- If you encounter an error and need help, please create an issue in the reposity and **include a complete verbose log.** 
 
 ---
  
-## License
+#### License
 
-This project is licensed under the MIT License. See the script header for details.
+<sub>This project is licensed under the MIT License. </sub>
+
+<sub> Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: </sub>
+
+<sub>• The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.</sub>
+
+<sub>• THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.</sub>
+
+<sub>(c) 2025 by Megamind</sub>
