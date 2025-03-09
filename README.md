@@ -180,7 +180,7 @@ These variables control which settings are imported by default. Set each to true
 
 `import_config`, `import_dhcp_leases`, `import_gravity_group`, `import_gravity_adlist`, `import_gravity_adlist_by_group`, `import_gravity_domainlist`, `import_gravity_domainlist_by_group`, `import_gravity_client`, `import_gravity_client_by_group`
 
-**Note**: By default, 'import_config' is initially set to false in `sync-holes.env`. Synchronizing configuration settings may cause issues with some installations (for example, if one Pi-hole is assigned to Ethernet and the other Wi-Fi).
+**Note**: By default, 'import_config' and 'import_dhcp_leases are initially set to false in `sync-holes.env`, thereby limiting the synchronization to gravity databases only.
 
 ---
 
