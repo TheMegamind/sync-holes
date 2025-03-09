@@ -321,6 +321,18 @@ validate_env() {
     local missing_vars=()
     local invalid_urls=()
 
+    # Check that temp_files_path is writable
+    if [[ ! -d "$temp_files_path" || ! -w "$temp_files_path" ]]; then
+        handle_error "Temporary files path '$temp_files_path' does not exist or is not writable. Please run with sudo or fix permissions."
+    fi
+
+    # Check that the directory of log_file is writable
+    local log_dir
+    log_dir="$(dirname "$log_file")"
+    if [[ ! -d "$log_dir" || ! -w "$log_dir" ]]; then
+        handle_error "Log file directory '$log_dir' does not exist or is not writable. Please run with sudo or fix permissions."
+    fi
+
     # Validate primary environment variables
     for var in "${required_vars[@]}"; do
         if [ -z "${!var}" ]; then
