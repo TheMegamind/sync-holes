@@ -32,12 +32,13 @@
 #
 #   Date            Description
 #   -------------   ------------------------------------------------------------
-#   01-05-2025      0.9.0 Initial Beta Release
-#   01-19-2025      0.9.1 Fix Log Rotation
-#   02-22-2025      0.9.2 Fix Import Options Handling
-#   03-03-2025      0.9.3 Synchronize > 2 Pi-holes
-#   03-04-2025      0.9.4 Override Import Settings via CLI
-#   03-06-2025      0.9.5 Beta Release Candidate 0.9.5
+#   01-05-2025      0.9.0   Initial Beta Release
+#   01-19-2025      0.9.1   Fix Log Rotation
+#   02-22-2025      0.9.2   Fix Import Options Handling
+#   03-03-2025      0.9.3   Synchronize > 2 Pi-holes
+#   03-04-2025      0.9.4   Override Import Settings via CLI
+#   03-06-2025      0.9.5   Beta Release Candidate 0.9.5
+#   03-09-2025      0.9.5.2 Change dhcp_leases default to false
 #
 # ===============================================================================
 #
@@ -302,7 +303,7 @@ validate_env() {
 
     # Set defaults for individual import settings if omitted from .env
     import_config="${import_config:-false}"
-    import_dhcp_leases="${import_dhcp_leases:-true}"
+    import_dhcp_leases="${import_dhcp_leases:-false}"
     import_gravity_group="${import_gravity_group:-true}"
     import_gravity_adlist="${import_gravity_adlist:-true}"
     import_gravity_adlist_by_group="${import_gravity_adlist_by_group:-true}"
