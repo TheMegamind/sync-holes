@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-
+SCRIPT_VERSION="0.9.5.3"
 #
 # ===============================================================================
 #                            sync-holes.sh
@@ -39,6 +39,7 @@
 #   03-04-2025      0.9.4   Override Import Settings via CLI
 #   03-06-2025      0.9.5   Beta Release Candidate 0.9.5
 #   03-09-2025      0.9.5.2 dhcp_leases default to false, use /usr/bin/env bash
+#   03-12-2025      0.9.5.3 Add version number to logging for troubleshooting
 #
 # ===============================================================================
 #
@@ -788,9 +789,6 @@ upload_teleporter_file() {
 #                          MAIN SCRIPT EXECUTION FLOW
 ################################################################################
 
-script_name=$(basename "$0")
-log_message "START" "Running $script_name..." "always"
-
 load_env            # Load environment variables from .env file
 
 # Apply Import Settings Overrides AFTER loading .env
@@ -802,6 +800,9 @@ if [ -n "$import_settings_file" ]; then
     exit 1
   fi
 fi
+
+script_name=$(basename "$0")
+log_message "START" "Running $(basename "$0") v${SCRIPT_VERSION}..." "always"
 
 validate_env        # Validate environment variables and paths
 check_dependencies  # Ensure required commands are available
