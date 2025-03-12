@@ -788,7 +788,7 @@ upload_teleporter_file() {
 ################################################################################
 #                          MAIN SCRIPT EXECUTION FLOW
 ################################################################################
-
+script_name=$(basename "$0")
 load_env            # Load environment variables from .env file
 
 # Apply Import Settings Overrides AFTER loading .env
@@ -796,12 +796,11 @@ if [ -n "$import_settings_file" ]; then
   if [ -f "$import_settings_file" ]; then
     override_import_settings=$(cat "$import_settings_file")
   else
-    echo "Import settings file '$import_settings_file' not found."
+    log_message "ERROR" "Import settings file '$import_settings_file' not found." "always" "red"
     exit 1
   fi
 fi
 
-script_name=$(basename "$0")
 log_message "START" "Running $(basename "$0") v${SCRIPT_VERSION}..." "always"
 
 validate_env        # Validate environment variables and paths
