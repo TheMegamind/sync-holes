@@ -248,9 +248,15 @@ done
 # Load Environment Variables
 # =======================================
 # Sources the .env file to load configuration variables.
+script_name=$(basename "$0")  #
 load_env() {
     if [ -f "$env_file" ]; then
         source "$env_file"
+        
+        # .env file loaded, log script version for reference in troubleshooting
+        script_name=$(basename "$0")  #
+        log_message "START" "Running $(basename "$0") v${SCRIPT_VERSION}..." "always"
+        
         log_message "ENV" "Environment file '$env_file' loaded." "if_verbose"
 
         # Ensure getopts overrides the .env file for mask_sensitive
@@ -788,8 +794,7 @@ upload_teleporter_file() {
 ################################################################################
 #                          MAIN SCRIPT EXECUTION FLOW
 ################################################################################
-script_name=$(basename "$0")
-load_env            # Load environment variables from .env file
+load_env           # Load environment variables from .env file
 
 # Apply Import Settings Overrides AFTER loading .env
 if [ -n "$import_settings_file" ]; then
@@ -800,8 +805,6 @@ if [ -n "$import_settings_file" ]; then
     exit 1
   fi
 fi
-
-log_message "START" "Running $(basename "$0") v${SCRIPT_VERSION}..." "always"
 
 validate_env        # Validate environment variables and paths
 check_dependencies  # Ensure required commands are available
