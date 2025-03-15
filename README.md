@@ -1,4 +1,4 @@
-<h2 align="center">Synchronize data and settings from a primary Pi-hole® to multiple secondary Pi-hole® instances via the Pi-hole v6 REST API.</h2>
+<h2 align="center">Easily synchronize data and settings from a primary Pi-hole® to multiple secondary Pi-hole® instances via the Pi-hole v6 REST API.</h2>
 
 <div align="center">
   <img src="https://github.com/TheMegamind/sync-holes/blob/main/assets/synchronize.png" alt="readme header image" width="300">
@@ -11,7 +11,6 @@
 [![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/TheMegamind/sync-holes)](https://github.com/TheMegamind/sync-holes/releases) 
 [![GitHub last commit](https://img.shields.io/github/last-commit/TheMegamind/sync-holes)](https://github.com/TheMegamind/sync-holes/commits/)
 [![Pi-hole v6](https://img.shields.io/badge/Pi--hole®-v6%20Required-brightgreen)](https://github.com/pi-hole/pi-hole) 
-[![Docker Build](https://img.shields.io/badge/docker-PENDING-lightgrey)](https://hub.docker.com/r/TheMegamind/sync-holes) 
 [![!#/bin/bash](https://img.shields.io/badge/-%23!%2Fbin%2Fbash-ebebeb.svg?style=flat&logo=gnu%20bash)](https://www.gnu.org/software/bash/) 
 
 ---
@@ -43,14 +42,15 @@
 ---
 
 ## Features
-- Easy, automated script-based installation for macOS and Linux
-- **Optional** Docker Installation (*Pending*)
+- Easy, automated script-based installation for Linux
 - Environment-based configuration via a `.env` file.
 - Intelligent session management (re-authenticates only when needed).
 - Configurable SSL support for self‑signed certificates.
 - Command‑line options to control console output and sensitive data masking.
 - Command-line options to override default import configuration settings
 - Detailed logging with configurable size, rotation, and optional data masking.
+
+<sub>For users looking for a Windows or Docker-based solution, try [nebula-sync](https://github.com/lovelaze/nebula-sync)</sub> 
 
 ---
 
