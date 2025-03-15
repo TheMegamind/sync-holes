@@ -53,7 +53,7 @@
 - Command-line options to override default import configuration settings
 - Detailed logging with configurable size, rotation, and optional data masking
 
-<sub>For users looking for a Windows or Docker-based solution, try [nebula-sync](https://github.com/lovelaze/nebula-sync)</sub> 
+<sub>For users looking for a Windows or Docker-based solution, try [nebula-sync](https://github.com/lovelaze/nebula-sync).</sub> 
 
 ---
 
