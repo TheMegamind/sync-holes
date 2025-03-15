@@ -43,14 +43,14 @@
 ---
 
 ## Features
-- Easy, automated script-based installation (for non-Docker users)
+- Easy, automated script-based installation for macOS and Linux
+- - **Optional** Docker Installation (*Pending*)
 - Environment-based configuration via a `.env` file.
 - Intelligent session management (re-authenticates only when needed).
 - Configurable SSL support for self‑signed certificates.
 - Command‑line options to control console output and sensitive data masking.
 - Command-line options to override default import configuration settings
 - Detailed logging with configurable size, rotation, and optional data masking.
-- **Optional** Docker Installation (*Pending*)
 
 ---
 
