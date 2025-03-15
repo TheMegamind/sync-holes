@@ -255,7 +255,7 @@ sudo ./sync-holes.sh -v
 - If an error occurs, the script prints a message to the console and logs details to `/var/log/sync-holes.log` (or your chosen log location).  
 - Run `sync-holes.sh -v` to see verbose logs, and `sync-holes.sh -v -u` to unmask sensitive data.  
 - The script attempts to install missing dependencies (on Debian-based, Fedora-based, or macOS). If that fails, you must install them manually.  
-- If you still have issues, please open a GitHub issue with a **verbose log** of the run.
+- **If you still have issues**, please open a GitHub issue with a **verbose log** of the run. Also include your OS (Debian, Fedora or macOS) and the specific hardware the script is runnning on.   
 
 ---
 
