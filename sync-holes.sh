@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-SCRIPT_VERSION="0.9.5.3"
+SCRIPT_VERSION="0.9.6.0"
 #
 # ===============================================================================
 #                            sync-holes.sh
@@ -32,14 +32,15 @@ SCRIPT_VERSION="0.9.5.3"
 #
 #   Date            Description
 #   -------------   ------------------------------------------------------------
-#   01-05-2025      0.9.0   Initial Beta Release
-#   01-19-2025      0.9.1   Fix Log Rotation
-#   02-22-2025      0.9.2   Fix Import Options Handling
-#   03-03-2025      0.9.3   Synchronize > 2 Pi-holes
-#   03-04-2025      0.9.4   Override Import Settings via CLI
-#   03-06-2025      0.9.5   Beta Release Candidate 0.9.5
-#   03-09-2025      0.9.5.2 dhcp_leases default to false, use /usr/bin/env bash
-#   03-12-2025      0.9.5.3 Add version number to logging for troubleshooting
+#   01-05-2025      0.9.0    Initial Beta Release
+#   01-19-2025      0.9.1    Fix Log Rotation
+#   02-22-2025      0.9.2    Fix Import Options Handling
+#   03-03-2025      0.9.3    Synchronize > 2 Pi-holes
+#   03-04-2025      0.9.4    Override Import Settings via CLI
+#   03-06-2025      0.9.5    Beta Release Candidate 0.9.5
+#   03-09-2025      0.9.5.2  dhcp_leases default to false, use /usr/bin/env bash
+#   03-12-2025      0.9.5.3  Add version number to logging for troubleshooting
+#   03-15-2025      0.9.6.0  Fixes for Fedora-based, and macOS installs
 #
 # ===============================================================================
 #
@@ -279,8 +280,46 @@ check_dependencies() {
         missing_deps+=("'curl'")
     fi
 
+    # NEW: Attempt to auto-install if missing. Then re-check. Debian, Fedora, macOS only.
     if [ ${#missing_deps[@]} -ne 0 ]; then
-        handle_error "Missing dependencies: ${missing_deps[*]}. Please install them to run this script."
+        log_message "INFO" "Detected missing dependencies: ${missing_deps[*]}."
+        
+        # Convert array to space-separated string (strip quotes)
+        local to_install=""
+        for dep in "${missing_deps[@]}"; do
+            to_install+=" ${dep//\'/}"
+        done
+        
+        log_message "INFO" "Attempting to install missing dependencies on Debian-based, Fedora-based, or macOS..."
+        
+        if command -v apt-get >/dev/null 2>&1; then
+            # Debian-based
+            log_message "INFO" "Using apt-get to install $to_install..."
+            sudo apt-get update -y && sudo apt-get install -y $to_install || true
+        elif command -v dnf >/dev/null 2>&1; then
+            # Fedora-based
+            log_message "INFO" "Using dnf to install $to_install..."
+            sudo dnf install -y $to_install || true
+        elif [[ "$(uname)" == "Darwin" ]]; then
+            # macOS
+            log_message "INFO" "Using Homebrew to install $to_install..."
+            brew install $to_install || true
+        else
+            log_message "WARN" "No recognized package manager found. Please install dependencies manually."
+        fi
+    fi
+
+    # Re-check if dependencies are still missing
+    local still_missing=()
+    if ! command -v jq &> /dev/null; then
+        still_missing+=("'jq'")
+    fi
+    if ! command -v curl &> /dev/null; then
+        still_missing+=("'curl'")
+    fi
+
+    if [ ${#still_missing[@]} -ne 0 ]; then
+        handle_error "Missing dependencies after attempted install: ${still_missing[*]}. Please install them to run this script."
     fi
 }
 
