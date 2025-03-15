@@ -44,7 +44,7 @@
 
 ## Features
 - Easy, automated script-based installation for macOS and Linux
-- - **Optional** Docker Installation (*Pending*)
+- **Optional** Docker Installation (*Pending*)
 - Environment-based configuration via a `.env` file.
 - Intelligent session management (re-authenticates only when needed).
 - Configurable SSL support for self‑signed certificates.
