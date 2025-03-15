@@ -4,7 +4,7 @@
   <img src="https://github.com/TheMegamind/sync-holes/blob/main/assets/synchronize.png" alt="readme header image" width="300">
 </div>
   
-<h6 align="center">**NOTE**: This project is independently-maintained. The maintainer is not affiliated with the Official Pi-hole® Project at https://github.com/pi-hole in any way. Pi-hole® and the Pi-hole logo are registered trademarks of Pi-hole LLC. </h6>
+<h6 align="center"><br>Pi-hole® and the Pi-hole logo are registered trademarks of Pi-hole LLC.<br><br>This project is independently-maintained. The maintainer is not affiliated with the Official Pi-hole® Project at https://github.com/pi-hole in any way.</h6>
 
 ---
 
