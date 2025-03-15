@@ -32,10 +32,11 @@
 # SOFTWARE.
 #
 #   Date            Description
-#   -------------   ------------------------------------------------------------
-#   03-05-2025      0.9.4 Initial Beta Release of Installation Script
-#   03-05-2025      0.9.5 Beta Release Candidate 0.9.5 (Debian-based)
-#   03-15-2025      0.9.6 Fixes for Fedora-based, and macOS installs
+#   -------------   --------------------------------------------------------------------
+#   03-05-2025      0.9.4    Initial Beta Release of Installation Script
+#   03-05-2025      0.9.5    Beta Release Candidate 0.9.5 (Debian-based)
+#   03-15-2025      0.9.6    Fixes for Fedora-based, and macOS installs
+#   03-15.2025      0.9.6.1  If no local .env exists, skip “newer .env available” prompt 
 #
 # Usage:
 #   ./sync-install.sh [options]
@@ -273,39 +274,48 @@ REPO_MTIME=0
 
 if [[ -f "$ENV_PATH" ]]; then
   LOCAL_MTIME=$(stat -c %Y "$ENV_PATH" 2>/dev/null || echo 0)
-fi
 
-if [[ -f "sync-holes.env" ]]; then
-  REPO_MTIME=$(stat -c %Y "sync-holes.env" 2>/dev/null || echo 0)
-fi
-
-if (( REPO_MTIME > LOCAL_MTIME )); then
-  # Attempt to retrieve last commit message for sync-holes.env, if .git is present
-  if [[ -d .git ]]; then
-    last_commit_msg=$(git log -1 --pretty=format:"%B" -- sync-holes.env 2>/dev/null || true)
-    if [[ -n "$last_commit_msg" ]]; then
-      warn "Latest commit message for sync-holes.env (for your reference):"
-      info "$last_commit_msg"
-    fi
+  if [[ -f "sync-holes.env" ]]; then
+    REPO_MTIME=$(stat -c %Y "sync-holes.env" 2>/dev/null || echo 0)
   fi
 
-  # Prompt user to overwrite or keep old
-  prompt "A newer sync-holes.env is available. Overwrite your existing .env? (O=Overwrite, K=Keep) [O/K]: "
-  read -r env_choice
-  if [[ "$env_choice" =~ ^[Oo]$ ]]; then
-    if [[ -f "$ENV_PATH" ]]; then
-      BACKUP_PATH="$ENV_PATH.$(date +%Y%m%d%H%M%S).bak"
-      warn "Found existing sync-holes.env at $ENV_PATH"
-      warn "Backing it up to $BACKUP_PATH"
-      run_cmd "sudo mv \"$ENV_PATH\" \"$BACKUP_PATH\""
+  if (( REPO_MTIME > LOCAL_MTIME )); then
+    # Attempt to retrieve last commit message for sync-holes.env, if .git is present
+    if [[ -d .git ]]; then
+      last_commit_msg=$(git log -1 --pretty=format:"%B" -- sync-holes.env 2>/dev/null || true)
+      if [[ -n "$last_commit_msg" ]]; then
+        warn "Latest commit message for sync-holes.env (for your reference):"
+        info "$last_commit_msg"
+      fi
     fi
-    info "Copying sync-holes.env → $ENV_DIR (newer version detected)"
+
+    # Prompt user to overwrite or keep old
+    prompt "A newer sync-holes.env is available. Overwrite your existing .env? (O=Overwrite, K=Keep) [O/K]: "
+    read -r env_choice
+    if [[ "$env_choice" =~ ^[Oo]$ ]]; then
+      if [[ -f "$ENV_PATH" ]]; then
+        BACKUP_PATH="$ENV_PATH.$(date +%Y%m%d%H%M%S).bak"
+        warn "Found existing sync-holes.env at $ENV_PATH"
+        warn "Backing it up to $BACKUP_PATH"
+        run_cmd "sudo mv \"$ENV_PATH\" \"$BACKUP_PATH\""
+      fi
+      info "Copying sync-holes.env → $ENV_DIR (newer version detected)"
+      run_cmd "sudo cp \"sync-holes.env\" \"$ENV_PATH\""
+    else
+      info "Keeping your existing .env. Skipping copy."
+    fi
+  else
+    info "Local sync-holes.env is same or newer than repo's; skipping .env copy."
+  fi
+
+else
+  # If no local .env exists at all, just copy from repo if it exists
+  if [[ -f "sync-holes.env" ]]; then
+    info "No existing .env found at $ENV_PATH. Copying sync-holes.env to $ENV_DIR now."
     run_cmd "sudo cp \"sync-holes.env\" \"$ENV_PATH\""
   else
-    info "Keeping your existing .env. Skipping copy."
+    warn "No sync-holes.env in the repo and none locally. Nothing to copy."
   fi
-else
-  info "Local sync-holes.env is same or newer than repo's; skipping .env copy."
 fi
 
 #==============================================================================
