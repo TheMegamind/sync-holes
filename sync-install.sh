@@ -34,7 +34,8 @@
 #   Date            Description
 #   -------------   ------------------------------------------------------------
 #   03-05-2025      0.9.4 Initial Beta Release of Installation Script
-#   03-05-2025      0.9.5 Beta Release Candidate 0.9.5
+#   03-05-2025      0.9.5 Beta Release Candidate 0.9.5 (Debian-based)
+#   03-15-2025      0.9.6 Fixes for Fedora-based, and macOS installs
 #
 # Usage:
 #   ./sync-install.sh [options]
@@ -150,8 +151,18 @@ prompt() {
 # 1. Check for Dependencies
 #==============================================================================
 info "Checking for necessary packages: git, curl, jq..."
-run_cmd "sudo apt-get update -y"
-run_cmd "sudo apt-get install -y git curl jq"
+
+# Replaced Debian-only apt-get lines with OS detection for Debian, Fedora, macOS
+if command -v apt-get >/dev/null 2>&1; then
+  run_cmd "sudo apt-get update -y"
+  run_cmd "sudo apt-get install -y git curl jq"
+elif command -v dnf >/dev/null 2>&1; then
+  run_cmd "sudo dnf install -y git curl jq"
+elif [[ "$(uname)" == "Darwin" ]]; then
+  run_cmd "brew install git curl jq"
+else
+  warn "No recognized package manager found. Please install git, curl, and jq manually."
+fi
 
 # Quick check for Bash 4+
 BASH_VERSION_MAJOR="${BASH_VERSINFO:-0}"
