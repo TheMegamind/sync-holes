@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-SCRIPT_VERSION="0.9.6.0"
+SCRIPT_VERSION="0.9.6.1"
 #
 # ===============================================================================
 #                            sync-holes.sh
@@ -30,17 +30,18 @@ SCRIPT_VERSION="0.9.6.0"
 # OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 #
-#   Date            Description
-#   -------------   ------------------------------------------------------------
-#   01-05-2025      0.9.0    Initial Beta Release
-#   01-19-2025      0.9.1    Fix Log Rotation
-#   02-22-2025      0.9.2    Fix Import Options Handling
-#   03-03-2025      0.9.3    Synchronize > 2 Pi-holes
-#   03-04-2025      0.9.4    Override Import Settings via CLI
-#   03-06-2025      0.9.5    Beta Release Candidate 0.9.5
-#   03-09-2025      0.9.5.2  dhcp_leases default to false, use /usr/bin/env bash
-#   03-12-2025      0.9.5.3  Add version number to logging for troubleshooting
-#   03-15-2025      0.9.6.0  Fixes for Fedora-based, and macOS installs
+#   Date          Description
+#   -----------   ------------------------------------------------------------
+#   01-05-2025    0.9.0    Initial Beta Release
+#   01-19-2025    0.9.1    Fix Log Rotation
+#   02-22-2025    0.9.2    Fix Import Options Handling
+#   03-03-2025    0.9.3    Synchronize > 2 Pi-holes
+#   03-04-2025    0.9.4    Override Import Settings via CLI
+#   03-06-2025    0.9.5    Beta Release Candidate 0.9.5
+#   03-09-2025    0.9.5.2  dhcp_leases default to false, use /usr/bin/env bash
+#   03-12-2025    0.9.5.3  Add version number to logging for troubleshooting
+#   03-15-2025    0.9.6.0  Fixes for Fedora-based, and macOS installs
+#   03-15-2025    0.9.6.1  Expand checks for valid JSON and added error handling
 #
 # ===============================================================================
 #
@@ -694,37 +695,40 @@ authenticate() {
         fi
 
         # Log the raw API response with sensitive data masked
-        log_message "AUTHENTICATION" "API Response: $(mask_sensitive_data "$(cat "$auth_response_file")")" "if_verbose"
+        local raw_auth
+        raw_auth=$(cat "$auth_response_file")
+        log_message "AUTHENTICATION" "API Response: $(mask_sensitive_data "$raw_auth")" "if_verbose"
 
-        # Parse the JSON response to extract session details
-        local clean_json
-        clean_json=$(cat "$auth_response_file" | tail -n 1)
+        # 1) Validate that we actually got valid JSON
+        if ! echo "$raw_auth" | jq . >/dev/null 2>&1; then
+            handle_error "Authentication response from $pi_name is not valid JSON. Possibly a 404 or wrong URL."
+        fi
+
+        # 2) Parse JSON to extract session details
         local session_valid
-        session_valid=$(echo "$clean_json" | jq -r '.session.valid')
-        pi_sid=$(echo "$clean_json" | jq -r '.session.sid')
+        session_valid=$(echo "$raw_auth" | jq -r '.session.valid')
+        pi_sid=$(echo "$raw_auth" | jq -r '.session.sid')
         local pi_validity
-        pi_validity=$(echo "$clean_json" | jq -r '.session.validity')
+        pi_validity=$(echo "$raw_auth" | jq -r '.session.validity')
 
+        # 3) Check session validity
         if [ "$session_valid" == "false" ]; then
-            # Handle authentication failure with a detailed message
-            handle_error "Authentication failed for $pi_name. $(echo "$clean_json" | jq -r '.session.message' | awk '{for (i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2))}1')."
-        elif [ -n "$pi_sid" ] && [ "$pi_sid" != "null" ]; then
+            handle_error "Authentication failed for $pi_name. $(echo "$raw_auth" | jq -r '.session.message')"
+        elif [ -z "$pi_sid" ] || [ "$pi_sid" = "null" ]; then
+            handle_error "No valid sessionID returned by $pi_name. Check if Pi-hole v6 is running at $pi_url."
+        else
             # Store the new sessionID if authentication is successful
             store_session "$pi_session_file" "$pi_sid" "$pi_validity"
             log_message "AUTHENTICATION" "$pi_name authenticated with session ID." "always"
-        else
-            # Log if authentication succeeded without a session ID
-            log_message "AUTHENTICATION" "$pi_name authenticated without a session ID." "always"
-            pi_sid=""
         fi
     else
-        # Log that a valid session ID is being reused
+        # Reuse unexpired session
         log_message "AUTHENTICATION" "Using stored unexpired sessionID for $pi_name." "if_verbose"
     fi
 
     # Dynamically assign the session ID to the provided variable name
     eval "$pi_sid_var_name='$pi_sid'"
-    rm -f "$auth_response_file"  # Clean up the authentication response file
+    rm -f "$auth_response_file"  # Clean up
 }
 
 ################################################################################
@@ -815,17 +819,24 @@ upload_teleporter_file() {
     upload_response=$(run_curl "POST" "$upload_url" "-H accept:application/json -H sid:$pi_sid" "" "" "${form_data[@]}")
 
     # If there's content in the curl error log, handle the error
-    if [ -s "$curl_error_log" ]; then handle_error "CURL error during upload to $pi_name."; fi
+    if [ -s "$curl_error_log" ]; then 
+        handle_error "CURL error during upload to $pi_name."
+    fi
+
+    # 1) Validate that the response is valid JSON
+    if ! echo "$upload_response" | jq . >/dev/null 2>&1; then
+        handle_error "Teleporter upload response from $pi_name is not valid JSON. Possibly a 404 or wrong URL."
+    fi
 
     # Log the full JSON API response with masking
-    [[ -n "$upload_response" ]] && log_message "UPLOAD" "API Response: $(echo "$upload_response" | jq -c .)" "if_verbose"
+    log_message "UPLOAD" "API Response: $(echo "$upload_response" | jq -c .)" "if_verbose"
 
-    # Check for an error in the API response
+    # 2) Check for an error in the API response
     if echo "$upload_response" | jq -e '.error' >/dev/null 2>&1; then
       handle_error "$(echo "$upload_response" | jq -r '.error.message')"
     fi
 
-    # Log a success message after uploading
+    # If we get here, it’s presumably valid
     log_message "UPLOAD" "Teleporter file uploaded to $pi_name." "always"
     log_message "INFO" "$primary_name and $pi_name settings synchronized!" "always" "green"
 }
