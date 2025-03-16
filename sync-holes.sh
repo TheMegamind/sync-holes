@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-SCRIPT_VERSION="0.9.6.2"
+SCRIPT_VERSION="0.9.6.3"
 #
 # ===============================================================================
 #                            sync-holes.sh
@@ -43,6 +43,7 @@ SCRIPT_VERSION="0.9.6.2"
 #   03-15-2025    0.9.6    Fixes for Fedora-based, and macOS installs
 #   03-15-2025    0.9.6.1  Expand checks for valid JSON and added error handling
 #   03-15-2025    0.9.6.2  Tweak Error Messages for invalid JSON response
+#   03-15-2025    0.9.6.3  Add validation of Pi-hole Configuration changes
 #
 # ===============================================================================
 #
@@ -60,10 +61,10 @@ declare -Ar COLORS=(
 # ========================================
 # Default Values for Environment Variables
 # ========================================
-# Note: 
+# Note:
 # The .env is read from /usr/local/etc/sync-holes.env. Depending on the
 # the installation this may be a literal file OR a symlink to the user's
-# preferred directory created by the install script. 
+# preferred directory created by the install script.
 declare -r env_file="/usr/local/etc/sync-holes.env"
 
 declare -r default_log_file="/var/log/sync-holes.log"
@@ -198,12 +199,12 @@ usage() {
     echo "    $(basename "$0") -F /path/to/import_settings.json"
     echo ""
     echo "Note:"
-    echo "  Any import settings keys omitted from the inline or file-based JSON will,"  
+    echo "  Any import settings keys omitted from the inline or file-based JSON will,"
     echo "  assume their default value from the .env file. So if a user wants to"
     echo "  override only one or two keys, they may supply an abbreviated JSON"
-    echo "  (e.g. '{"dhcp_leases": false}') and only the default value(s) for the"
+    echo "  (e.g. '{\"dhcp_leases\": false}') and only the default value(s) for the"
     echo "  specified key(s) will be overridden while all others remain unchanged."
-    echo ""  
+    echo ""
     echo "Reminder:"
     echo "  Depending on your installation and system configuration, you may need to run"
     echo "  this script with sudo to access protected directories, for example:"
@@ -250,16 +251,15 @@ done
 # =======================================
 # Load Environment Variables
 # =======================================
-# Sources the .env file to load configuration variables.
 script_name=$(basename "$0")  #
 load_env() {
     if [ -f "$env_file" ]; then
         source "$env_file"
-        
+
         # .env file loaded, log script version for reference in troubleshooting
         script_name=$(basename "$0")  #
         log_message "START" "Running $(basename "$0") v${SCRIPT_VERSION}..." "always"
-        
+
         log_message "ENV" "Environment file '$env_file' loaded." "if_verbose"
 
         # Ensure getopts overrides the .env file for mask_sensitive
@@ -272,7 +272,6 @@ load_env() {
 # =======================================
 # Check Required Dependencies
 # =======================================
-# Ensures that necessary commands like jq and curl are installed.
 check_dependencies() {
     local missing_deps=()
     if ! command -v jq &> /dev/null; then
@@ -285,15 +284,15 @@ check_dependencies() {
     # NEW: Attempt to auto-install if missing. Then re-check. Debian, Fedora, macOS only.
     if [ ${#missing_deps[@]} -ne 0 ]; then
         log_message "INFO" "Detected missing dependencies: ${missing_deps[*]}."
-        
+
         # Convert array to space-separated string (strip quotes)
         local to_install=""
         for dep in "${missing_deps[@]}"; do
             to_install+=" ${dep//\'/}"
         done
-        
+
         log_message "INFO" "Attempting to install missing dependencies on Debian-based, Fedora-based, or macOS..."
-        
+
         if command -v apt-get >/dev/null 2>&1; then
             # Debian-based
             log_message "INFO" "Using apt-get to install $to_install..."
@@ -328,7 +327,6 @@ check_dependencies() {
 # =======================================
 # SSL Verification Check
 # =======================================
-# Logs whether SSL verification is enabled or disabled based on configuration.
 ssl_verification() {
     if [ "${verify_ssl:-0}" -eq 0 ]; then
         log_message "ENV" "SSL verification is disabled (verify_ssl=0) in .env." "if_verbose"
@@ -338,9 +336,7 @@ ssl_verification() {
 # =======================================
 # Validate Environment Variables and Paths
 # =======================================
-# Ensures required environment variables are set and paths are valid.
 validate_env() {
-    # Apply fallback defaults for environment variables after sourcing .env
     temp_files_path="${temp_files_path:-$default_temp_files_path}"
     log_file="${log_file:-$default_log_file}"
     log_size_limit="${log_size_limit:-$default_log_size_limit}"
@@ -349,7 +345,6 @@ validate_env() {
     mask_sensitive="${mask_sensitive:-$default_mask_sensitive}"
     import_settings_json="${import_settings_json:-$default_import_settings_json}"
 
-    # Set defaults for individual import settings if omitted from .env
     import_config="${import_config:-false}"
     import_dhcp_leases="${import_dhcp_leases:-false}"
     import_gravity_group="${import_gravity_group:-true}"
@@ -360,7 +355,6 @@ validate_env() {
     import_gravity_client="${import_gravity_client:-true}"
     import_gravity_client_by_group="${import_gravity_client_by_group:-true}"
 
-    # Derived paths based on temp_files_path
     teleporter_file="$temp_files_path/teleporter.zip"
     primary_session_file="$temp_files_path/primary-session.json"
     curl_error_log="$temp_files_path/curl_error.log"
@@ -381,23 +375,19 @@ validate_env() {
         handle_error "Log file directory '$log_dir' does not exist or is not writable. Please run with sudo or fix permissions."
     fi
 
-    # Validate primary environment variables
     for var in "${required_vars[@]}"; do
         if [ -z "${!var}" ]; then
             missing_vars+=("$var")
         fi
     done
 
-    # Check for secondary arrays existence and equal length
     if [ -z "${secondary_names[*]}" ] || [ -z "${secondary_urls[*]}" ] || [ -z "${secondary_passes[*]}" ]; then
         missing_vars+=("secondary_names, secondary_urls, secondary_passes")
     elif [ "${#secondary_names[@]}" -ne "${#secondary_urls[@]}" ] || [ "${#secondary_names[@]}" -ne "${#secondary_passes[@]}" ]; then
         handle_error "The arrays secondary_names, secondary_urls, and secondary_passes must have the same number of elements."
     fi
 
-    # Regex pattern for validating URLs
     local url_regex='^(https?://)([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|([0-9]{1,3}\.){3}[0-9]{1,3})(:[0-9]{1,5})?$'
-
     if [[ ! "$primary_url" =~ $url_regex ]]; then
         invalid_urls+=("primary_url")
     fi
@@ -410,34 +400,31 @@ validate_env() {
         handle_error "Invalid URL format for: ${invalid_urls[*]} in $(basename "$env_file")."
     fi
 
-    # Log validation success
     log_message "ENV" "All required environment variables and paths validated successfully." "if_verbose"
 }
 
 # =======================================
 # Logging Size Limit & Rotation
 # =======================================
-# Manages log file size and rotates logs when necessary.
 check_log_size() {
     local log_size_limit=${log_size_limit:-5}
     local max_old_logs=${max_old_logs:-5}
 
     if [ -f "$log_file" ]; then
         local log_size_kb
-        log_size_kb=$(du -k "$log_file" | cut -f1)  # Get log file size in KB
+        log_size_kb=$(du -k "$log_file" | cut -f1)
 
         if (( log_size_kb / 1024 >= log_size_limit )); then
-            rotate_log  # Rotate if size limit is exceeded
+            rotate_log
         fi
     fi
 
-    cleanup_old_logs "$log_file" "$max_old_logs"  # Remove old logs beyond retention
+    cleanup_old_logs "$log_file" "$max_old_logs"
 }
 
 # =======================================
 # Rotate Log File
 # =======================================
-# Renames the current log file with a timestamp and starts a new one.
 rotate_log() {
     local timestamp
     timestamp=$(date +"%Y%m%d%H%M%S")
@@ -449,12 +436,10 @@ rotate_log() {
 # =======================================
 # Cleanup Old Logs
 # =======================================
-# Deletes logs that have exceeded their retention limit
 cleanup_old_logs() {
     local log_file_base="$1"
     local retention_count="$2"
 
-    # Find and delete logs older than the retention limit
     ls -1t "${log_file_base}."* 2>/dev/null | tail -n +$((retention_count + 1)) | while read -r old_log; do
         rm -f "$old_log"
         log_message "INFO" "Deleted old log file: $old_log" "if_verbose"
@@ -468,27 +453,23 @@ cleanup_old_logs() {
 # =======================================
 # Handle Errors
 # =======================================
-# Logs error messages, performs cleanup, and exits the script.
 handle_error() {
     local message="$1"
-    verbose=1  # Enable verbose to ensure error messages are printed
+    verbose=1
 
     if [ -s "$curl_error_log" ]; then
-        # Log curl error messages if available
         log_message "ERROR" "$(cat "$curl_error_log")" "always" "red"
         rm -f "$curl_error_log"
     else
-        # Otherwise, log the provided message
         log_message "ERROR" "$message" "always" "red"
     fi
 
-    exit 1  # Exit the script with an error code
+    exit 1
 }
 
 # =======================================
 # Remove File Safely
 # =======================================
-# Deletes a specified file and logs the action.
 remove_file() {
     local file_path="$1"
     local description="$2"
@@ -498,7 +479,6 @@ remove_file() {
             log_message "CLEANUP" "Deleted $description: $file_path" "if_verbose"
         else
             log_message "ERROR":" Failed to delete $description: $file_path." "always"
-            # Do not exit here; let cleanup handle the exit status
             return 1
         fi
     fi
@@ -508,36 +488,30 @@ remove_file() {
 # =======================================
 # Cleanup Temporary Files on Exit Function
 # =======================================
-# Performs cleanup tasks and preserves the original exit status.
 cleanup() {
-    local exit_code=$?  # Capture the original exit status
+    local exit_code=$?
 
     log_message "CLEANUP" "Beginning cleanup..." "if_verbose"
 
-    # Initialize a variable to track cleanup failures
     local cleanup_failed=0
 
-    # Attempt to remove each file; if any removal fails, set cleanup_failed
     remove_file "$teleporter_file" "temporary backup file" || cleanup_failed=1
     remove_file "$curl_error_log" "curl error log" || cleanup_failed=1
     remove_file "$auth_response_file" "authentication response file" || cleanup_failed=1
 
-    # If any cleanup task failed, set the exit code to 1
     if [ $cleanup_failed -ne 0 ]; then
         exit_code=1
     fi
 
-    # Report Completion based on exit code.
     if [ $exit_code -ne 0 ]; then
         log_message "INFO" "Exiting ($exit_code)." "always"
-      else
+    else
         log_message "INFO" "Done." "if_verbose"
-      fi
+    fi
 
-    exit "$exit_code"  # Exit with the original or modified exit code
+    exit "$exit_code"
 }
 
-# Set up trap to ensure cleanup is called on script exit
 trap 'cleanup' EXIT
 
 ################################################################################
@@ -547,7 +521,6 @@ trap 'cleanup' EXIT
 # =======================================
 # Run Curl Commands (except Upload)
 # =======================================
-# Executes a curl command with provided parameters and handles errors.
 run_curl() {
     local method="$1"
     local url="$2"
@@ -555,33 +528,28 @@ run_curl() {
     local data="$4"
     local output="$5"
     shift 5
-    local extra_args=("$@")  # This will be your form data array
+    local extra_args=("$@")
 
     local curl_args=(-s -k -S -X "$method" "$url")
     > "$curl_error_log"
 
-    # Add headers if provided
     if [ -n "$headers" ]; then
         read -r -a header_array <<< "$headers"
         curl_args+=("${header_array[@]}")
     fi
 
-    # Add additional arguments if provided
     if [ ${#extra_args[@]} -gt 0 ]; then
         curl_args+=("${extra_args[@]}")
     fi
 
-    # Add data payload if provided
     if [ -n "$data" ]; then
         curl_args+=(--data "$data")
     fi
 
-    # Specify output file if provided
     if [ -n "$output" ]; then
         curl_args+=(-o "$output")
     fi
 
-    # Execute the curl command and capture the response
     local curl_command="curl $(printf "%s " "${curl_args[@]}")"
     local masked_curl_cmd
     masked_curl_cmd=$(mask_sensitive_data "$curl_command")
@@ -591,12 +559,10 @@ run_curl() {
     response=$(curl "${curl_args[@]}" 2>"$curl_error_log")
     local curl_exit_code=$?
 
-    # Handle transport-level errors (e.g., DNS failures)
     if [ $curl_exit_code -ne 0 ]; then
         handle_error "Unable to complete synchronization due to CURL failure (transport or DNS error)."
     fi
 
-    # If no output file was specified, return the response via stdout
     if [ -z "$output" ]; then
         echo "$response"
     fi
@@ -609,7 +575,6 @@ run_curl() {
 # =======================================
 # Store Session
 # =======================================
-# Saves the session ID and its expiration time to a file for future reuse.
 store_session() {
     local file="$1"
     local sid="$2"
@@ -618,22 +583,18 @@ store_session() {
     current_time=$(date +%s)
     local expires_at=$((current_time + validity))
 
-    # Create a JSON object with session details
     jq -n --arg sid "$sid" --argjson expires_at "$expires_at" \
         '{sid: $sid, expires_at: $expires_at}' > "$file"
 
-    # Convert epoch time to human-readable format
+    local human_readable_expires_at
     human_readable_expires_at=$(date -d "@$expires_at" '+%Y-%m-%d %H:%M:%S')
 
-    # Log the message with masked sessionID and human-readable expiry
     log_message "AUTHENTICATION" "$(mask_sensitive_data "New sessionID (SID) stored in $file (expires at $human_readable_expires_at)")" "if_verbose"
-
 }
 
 # =======================================
 # Reuse Session
 # =======================================
-# Attempts to reuse an existing session ID from a file if it's still valid.
 reuse_session() {
     local file="$1"
 
@@ -648,31 +609,27 @@ reuse_session() {
         sid=$(jq -r '.sid' "$file" 2>/dev/null)
 
         if ((current_time < expires_at)); then
-            # Convert epoch time to human-readable format
+            local human_readable_expires_at
             human_readable_expires_at=$(date -d "@$expires_at" '+%Y-%m-%d %H:%M:%S')
 
-            # Log the message with masked sessionID and human-readable expiry
             log_message "AUTHENTICATION" "$(mask_sensitive_data "Found sessionID: $sid (expires at $human_readable_expires_at)")" "if_verbose"
-
             log_message "AUTHENTICATION" "Reusing valid sessionID for $(basename "$file" | cut -d'-' -f1) from $file" "always"
             echo "$sid"
             return 0
         fi
 
-        # If the session has expired, remove the sessionID file
         log_message "AUTHENTICATION" "sessionID in $file has expired. Removing $file." "if_verbose"
         rm -f "$file"
     else
         log_message "AUTHENTICATION" "No sessionID file found at $file." "if_verbose"
     fi
 
-    return 1  # Indicate that session could not be reused
+    return 1
 }
 
 # =======================================
 # Authenticate with REST API
 # =======================================
-# Authenticates with a Pi-hole instance and manages session IDs.
 authenticate() {
     local pi_name="$1"
     local pi_pass="$2"
@@ -687,49 +644,40 @@ authenticate() {
         local pi_auth_url="$pi_url/api/auth"
         log_message "AUTHENTICATION" "$(mask_sensitive_data "Authenticating with $pi_name using password: $pi_pass")" "if_verbose"
 
-        # Execute the authentication request and save the response
         run_curl "POST" "$pi_auth_url" '-H Content-Type:application/json' "$pi_auth_data" "$auth_response_file"
 
-        # Check if the authentication response file exists and is not empty
         if [ ! -s "$auth_response_file" ]; then
             handle_error "Authentication response from $pi_name is empty or missing."
         fi
 
-        # Log the raw API response with sensitive data masked
         local raw_auth
         raw_auth=$(cat "$auth_response_file")
         log_message "AUTHENTICATION" "API Response: $(mask_sensitive_data "$raw_auth")" "if_verbose"
 
-        # 1) Validate that we actually got valid JSON
         if ! echo "$raw_auth" | jq . >/dev/null 2>&1; then
             handle_error "Authentication failed. Invalid JSON returned from $pi_name. Confirm Pi-hole is running at $pi_url."
         fi
 
-        # 2) Parse JSON to extract session details
         local session_valid
         session_valid=$(echo "$raw_auth" | jq -r '.session.valid')
         pi_sid=$(echo "$raw_auth" | jq -r '.session.sid')
         local pi_validity
         pi_validity=$(echo "$raw_auth" | jq -r '.session.validity')
 
-        # 3) Check session validity
         if [ "$session_valid" == "false" ]; then
             handle_error "Authentication failed for $pi_name. $(echo "$raw_auth" | jq -r '.session.message')"
         elif [ -z "$pi_sid" ] || [ "$pi_sid" = "null" ]; then
-            handle_error "No valid sessionID returned by $pi_name. Confirm Pi-hole is running at  $pi_url.""
+            handle_error "No valid sessionID returned by $pi_name. Confirm Pi-hole is running at  $pi_url."
         else
-            # Store the new sessionID if authentication is successful
             store_session "$pi_session_file" "$pi_sid" "$pi_validity"
             log_message "AUTHENTICATION" "$pi_name authenticated with session ID." "always"
         fi
     else
-        # Reuse unexpired session
         log_message "AUTHENTICATION" "Using stored unexpired sessionID for $pi_name." "if_verbose"
     fi
 
-    # Dynamically assign the session ID to the provided variable name
     eval "$pi_sid_var_name='$pi_sid'"
-    rm -f "$auth_response_file"  # Clean up
+    rm -f "$auth_response_file"
 }
 
 ################################################################################
@@ -739,9 +687,7 @@ authenticate() {
 # =======================================
 # Generate Import JSON
 # =======================================
-# Creates a JSON object for import settings using jq.
 generate_import_json() {
-  # Build the default import settings JSON using values loaded from .env or set in validate_env.
   default_import_json=$(jq -n \
     --argjson config "$import_config" \
     --argjson dhcp_leases "$import_dhcp_leases" \
@@ -752,31 +698,25 @@ generate_import_json() {
     --argjson gravity_domainlist_by_group "$import_gravity_domainlist_by_group" \
     --argjson gravity_client "$import_gravity_client" \
     --argjson gravity_client_by_group "$import_gravity_client_by_group" \
-    '{config: $config, dhcp_leases: $dhcp_leases, gravity: {group: $gravity_group, adlist: $gravity_adlist, adlist_by_group: $gravity_adlist_by_group, domainlist: $gravity_domainlist, domainlist_by_group: $gravity_domainlist_by_group, client: $gravity_client, client_by_group: $gravity_client_by_group}}')
+    '{config: $config, dhcp_leases: $dhcp_leases, gravity: {group: $gravity_group, adlist: $gravity_adlist, adlist_by_group: $gravity_adlist_by_group, domainlist: $gravity_domainlist, domainlist_by_group: $gravity_domainlist_by_group, client: $gravity_client, client_by_group: $gravity_client_by_group}}'
+  )
 
   if [ -n "$override_import_settings" ]; then
-    # Remove keys from the override that have null values.
     clean_override=$(echo "$override_import_settings" | jq 'with_entries(select(.value != null))')
-    # Merge the default JSON with the clean override.
-    # The '*' operator overlays keys from the override onto the default.
-    # Finally, delete any keys that remain null.
     final_import_json=$(echo "$default_import_json" "$clean_override" | jq -s '.[0] * .[1] | del(..|select(. == null))')
   else
     final_import_json="$default_import_json"
   fi
 
-  # Output the final JSON (compact representation)
   echo "$final_import_json"
 }
 
 # =======================================
 # Download Teleporter File
 # =======================================
-# Downloads the Teleporter settings from the primary Pi-hole.
 download_teleporter_file() {
     local headers="-H Accept:application/zip"
 
-    # Include session ID in headers if present. Skip for password-less Pi-hole instances.
     if [ -n "$primary_sid" ]; then
         headers="$headers -H sid:$primary_sid"
     else
@@ -786,10 +726,9 @@ download_teleporter_file() {
     log_message "DOWNLOAD" "Downloading Teleporter settings from $primary_name." "if_verbose"
     run_curl "GET" "$primary_url/api/teleporter" "$headers" "" "$teleporter_file"
 
-    # Validate the downloaded file is a valid ZIP archive
     if [ ! -f "$teleporter_file" ] || ! file "$teleporter_file" | grep -q "Zip archive data"; then
         handle_error "Failed to download or validate Teleporter file from $primary_name."
-        return  # Exit the function after handling the error
+        return
     fi
 
     log_message "DOWNLOAD" "Teleporter file downloaded from $primary_name." "always"
@@ -798,7 +737,6 @@ download_teleporter_file() {
 # =======================================
 # Upload Teleporter File to a Secondary Pi-hole
 # =======================================
-# Uploads the Teleporter settings to a secondary Pi-hole.
 upload_teleporter_file() {
     local pi_name="$1"
     local pi_url="$2"
@@ -806,46 +744,129 @@ upload_teleporter_file() {
     local upload_url="${pi_url}/api/teleporter"
     log_message "UPLOAD" "Uploading Teleporter settings to $pi_name." "if_verbose"
 
-    # Generate the import settings JSON and compact it
     local import_settings_json
     import_settings_json=$(generate_import_json)
     local import_json_compact
     import_json_compact=$(echo "$import_settings_json" | jq -c .)
 
-    # Define form data as an array
     local form_data=(-F "file=@$teleporter_file" -F "import=$import_json_compact")
 
-    # Execute run_curl with the form data as additional arguments
     local upload_response
     upload_response=$(run_curl "POST" "$upload_url" "-H accept:application/json -H sid:$pi_sid" "" "" "${form_data[@]}")
 
-    # If there's content in the curl error log, handle the error
-    if [ -s "$curl_error_log" ]; then 
+    if [ -s "$curl_error_log" ]; then
         handle_error "CURL error during upload to $pi_name."
     fi
 
-    # 1) Validate that the response is valid JSON
     if ! echo "$upload_response" | jq . >/dev/null 2>&1; then
-        handle_error "handle_error "Teleporter upload failed. Invalid JSON returned from $pi_name. Confirm Pi-hole is running at  $pi_url.""
+        handle_error "Teleporter upload failed. Invalid JSON returned from $pi_name. Confirm Pi-hole is running at  $pi_url."
     fi
 
-    # Log the full JSON API response with masking
     log_message "UPLOAD" "API Response: $(echo "$upload_response" | jq -c .)" "if_verbose"
 
-    # 2) Check for an error in the API response
     if echo "$upload_response" | jq -e '.error' >/dev/null 2>&1; then
       handle_error "$(echo "$upload_response" | jq -r '.error.message')"
     fi
 
-    # If we get here, it’s presumably valid
     log_message "UPLOAD" "Teleporter file uploaded to $pi_name." "always"
     log_message "INFO" "$primary_name and $pi_name settings synchronized!" "always" "green"
 }
 
 ################################################################################
+#         NEW: On-demand Pi-hole Validation if .env changes (Checksums)
+################################################################################
+
+ENV_CHECKSUM_FILE="${env_file}.sha256"
+
+compute_env_checksum() {
+  sha256sum "$env_file" 2>/dev/null | awk '{print $1}'
+}
+
+test_pihole_auth() {
+  local name="$1"
+  local pass="$2"
+  local url="$3"
+
+  # Minimal "auth" check
+  local response
+  response="$(curl -s -k -S -X POST "$url/api/auth" \
+    -H "Content-Type: application/json" \
+    --data "{\"password\":\"$pass\"}" 2>/dev/null || true)"
+
+  if [[ -z "$response" ]]; then
+    handle_error "No response from $name at $url. Possibly wrong URL or Pi-hole not reachable."
+  fi
+
+  # Check if response is valid JSON
+  if ! echo "$response" | jq . >/dev/null 2>&1; then
+    handle_error "Response from $name is not valid JSON. Possibly a 404 or old Pi-hole version. ($url)"
+  fi
+
+  # Check if we see "valid":true
+  if ! echo "$response" | grep -q '"valid":true'; then
+    handle_error "Validation failed for $name. $(mask_sensitive_data "$response")"
+  fi
+
+  log_message "INFO" "$name validated successfully via test auth." "always"
+}
+
+validate_piholes_after_env_changes() {
+  # 1) Validate Primary
+  log_message "INFO" "Testing connectivity for PRIMARY: $primary_name at $primary_url" "always"
+  test_pihole_auth "$primary_name" "$primary_pass" "$primary_url"
+
+  # 2) Validate each Secondary
+  for i in "${!secondary_names[@]}"; do
+    local s_name="${secondary_names[$i]}"
+    local s_url="${secondary_urls[$i]}"
+    local s_pass="${secondary_passes[$i]}"
+
+    log_message "INFO" "Testing connectivity for SECONDARY: $s_name at $s_url" "always"
+    test_pihole_auth "$s_name" "$s_pass" "$s_url"
+  done
+
+  log_message "INFO" "Extended Pi-hole validation passed for all instances." "always"
+}
+
+check_env_changes() {
+  # If .env does not exist, just skip
+  if [[ ! -f "$env_file" ]]; then
+    return
+  fi
+
+  local current_hash
+  current_hash="$(compute_env_checksum)"
+  if [[ -z "$current_hash" ]]; then
+    return
+  fi
+
+  if [[ -f "$ENV_CHECKSUM_FILE" ]]; then
+    local old_hash
+    old_hash="$(cat "$ENV_CHECKSUM_FILE" 2>/dev/null || true)"
+
+    if [[ "$current_hash" != "$old_hash" ]]; then
+      log_message "INFO" "Detected changes in $env_file. Running extended Pi-hole validation..." "always"
+      validate_piholes_after_env_changes
+      echo "$current_hash" > "$ENV_CHECKSUM_FILE"
+    else
+      log_message "INFO" "No changes in $env_file since last run. Skipping extended Pi-hole validation." "if_verbose"
+    fi
+  else
+    log_message "INFO" "No previous checksum found for $env_file. Running extended Pi-hole validation..." "always"
+    validate_piholes_after_env_changes
+    echo "$current_hash" > "$ENV_CHECKSUM_FILE"
+  fi
+}
+
+################################################################################
 #                          MAIN SCRIPT EXECUTION FLOW
 ################################################################################
-load_env           # Load environment variables from .env file
+
+load_env           # 1) Load environment variables from .env file
+check_env_changes  # 2) If .env changed, do extended Pi-hole connectivity checks
+validate_env       # 3) Validate environment variables and paths
+check_dependencies # 4) Ensure required commands are available
+ssl_verification   # 5) Log SSL verification status
 
 # Apply Import Settings Overrides AFTER loading .env
 if [ -n "$import_settings_file" ]; then
@@ -856,10 +877,6 @@ if [ -n "$import_settings_file" ]; then
     exit 1
   fi
 fi
-
-validate_env        # Validate environment variables and paths
-check_dependencies  # Ensure required commands are available
-ssl_verification    # Log SSL verification status
 
 # Authenticate with the primary Pi-hole
 primary_session_file="$temp_files_path/primary-session.json"
