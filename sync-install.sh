@@ -38,6 +38,7 @@
 #   03-15-2025      0.9.6    Fixes for Fedora-based, and macOS installs
 #   03-15-2025      0.9.6.1  If no local .env exists, skip “newer .env available” prompt 
 #   03-16-2025      0.9.7    Check for newer install script, add logging, bump version #
+#   03-16-2025      0.9.7.1  Revise check for newer install script
 #
 # Usage:
 #   ./sync-install.sh [options]
@@ -218,23 +219,35 @@ fi
 #==============================================================================
 # 3. Clone or Update the Repository
 #==============================================================================
+
 if [[ -d "$CLONE_DIR/.git" ]]; then
   info "Directory '$CLONE_DIR' has .git; pulling latest changes..."
+
+  # 1. Capture the current commit hash before pulling
+  old_sha="$(git rev-parse HEAD 2>/dev/null || true)"
+
+  # 2. Pull the latest changes
   run_cmd "cd \"$CLONE_DIR\" && git pull"
 
-  #============================================================================
-  # Check if sync-install.sh changed & optionally restart
-  #============================================================================
-  changed_files="$(git diff --name-only HEAD@{1} HEAD | grep sync-install.sh || true)"
-  if [[ -n "$changed_files" ]]; then
-    warn "A newer version of 'sync-install.sh' is now available."
-    prompt "Would you like to restart with the updated script? (y/N): "
-    read -r restart_choice
-    if [[ "$restart_choice" =~ ^[Yy]$ ]]; then
-      info "Re-running updated install script..."
-      exec "$0" "$@"
-    else
-      warn "Continuing with existing version of sync-install.sh."
+  # 3. Capture the new commit hash after pulling
+  new_sha="$(git rev-parse HEAD 2>/dev/null || true)"
+
+  # 4. Only if we actually got a different commit do we check for changed files
+  if [[ "$old_sha" != "$new_sha" ]]; then
+    # Find which files changed between old_sha and new_sha
+    changed_files="$(git diff --name-only "$old_sha" "$new_sha" 2>/dev/null || true)"
+
+    # 5. If sync-install.sh is indeed in the changed set, prompt user
+    if echo "$changed_files" | grep -q '^sync-install.sh$'; then
+      warn "A newer version of 'sync-install.sh' is now available."
+      prompt "Would you like to restart with the updated script? (y/N): "
+      read -r restart_choice
+      if [[ "$restart_choice" =~ ^[Yy]$ ]]; then
+        info "Re-running updated install script..."
+        exec "$0" "$@"  # re-run the script with the same args
+      else
+        warn "Continuing with old version of sync-install.sh."
+      fi
     fi
   fi
 
