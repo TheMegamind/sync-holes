@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-SCRIPT_VERSION="0.9.6.1"
+SCRIPT_VERSION="0.9.6.2"
 #
 # ===============================================================================
 #                            sync-holes.sh
@@ -40,8 +40,9 @@ SCRIPT_VERSION="0.9.6.1"
 #   03-06-2025    0.9.5    Beta Release Candidate 0.9.5
 #   03-09-2025    0.9.5.2  dhcp_leases default to false, use /usr/bin/env bash
 #   03-12-2025    0.9.5.3  Add version number to logging for troubleshooting
-#   03-15-2025    0.9.6.0  Fixes for Fedora-based, and macOS installs
+#   03-15-2025    0.9.6    Fixes for Fedora-based, and macOS installs
 #   03-15-2025    0.9.6.1  Expand checks for valid JSON and added error handling
+#   03-15-2025    0.9.6.2  Tweak Error Messages for invalid JSON response
 #
 # ===============================================================================
 #
@@ -701,7 +702,7 @@ authenticate() {
 
         # 1) Validate that we actually got valid JSON
         if ! echo "$raw_auth" | jq . >/dev/null 2>&1; then
-            handle_error "Authentication response from $pi_name is not valid JSON. Possibly a 404 or wrong URL."
+            handle_error "Authentication failed. Invalid JSON returned from $pi_name. Confirm Pi-hole is running at $pi_url."
         fi
 
         # 2) Parse JSON to extract session details
@@ -715,7 +716,7 @@ authenticate() {
         if [ "$session_valid" == "false" ]; then
             handle_error "Authentication failed for $pi_name. $(echo "$raw_auth" | jq -r '.session.message')"
         elif [ -z "$pi_sid" ] || [ "$pi_sid" = "null" ]; then
-            handle_error "No valid sessionID returned by $pi_name. Check if Pi-hole v6 is running at $pi_url."
+            handle_error "No valid sessionID returned by $pi_name. Confirm Pi-hole is running at  $pi_url.""
         else
             # Store the new sessionID if authentication is successful
             store_session "$pi_session_file" "$pi_sid" "$pi_validity"
@@ -825,7 +826,7 @@ upload_teleporter_file() {
 
     # 1) Validate that the response is valid JSON
     if ! echo "$upload_response" | jq . >/dev/null 2>&1; then
-        handle_error "Teleporter upload response from $pi_name is not valid JSON. Possibly a 404 or wrong URL."
+        handle_error "handle_error "Teleporter upload failed. Invalid JSON returned from $pi_name. Confirm Pi-hole is running at  $pi_url.""
     fi
 
     # Log the full JSON API response with masking
