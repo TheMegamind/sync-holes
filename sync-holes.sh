@@ -807,12 +807,12 @@ test_pihole_auth() {
     handle_error "Validation failed for $name. $(mask_sensitive_data "$response")"
   fi
 
-  log_message "INFO" "$name validated successfully via test auth." "always"
+  log_message "ENV" "$name validated successfully via test auth." "always"
 }
 
 validate_piholes_after_env_changes() {
   # 1) Validate Primary
-  log_message "INFO" "Testing connectivity for PRIMARY: $primary_name at $primary_url" "always"
+  log_message "ENV" "Testing connectivity for PRIMARY: $primary_name at $primary_url" "always"
   test_pihole_auth "$primary_name" "$primary_pass" "$primary_url"
 
   # 2) Validate each Secondary
@@ -821,11 +821,11 @@ validate_piholes_after_env_changes() {
     local s_url="${secondary_urls[$i]}"
     local s_pass="${secondary_passes[$i]}"
 
-    log_message "INFO" "Testing connectivity for SECONDARY: $s_name at $s_url" "always"
+    log_message "ENV" "Testing connectivity for SECONDARY: $s_name at $s_url" "always"
     test_pihole_auth "$s_name" "$s_pass" "$s_url"
   done
 
-  log_message "INFO" "Extended Pi-hole validation passed for all instances." "always"
+  log_message "ENV" "Extended Pi-hole validation passed for all instances." "always"
 }
 
 check_env_changes() {
@@ -845,14 +845,14 @@ check_env_changes() {
     old_hash="$(cat "$ENV_CHECKSUM_FILE" 2>/dev/null || true)"
 
     if [[ "$current_hash" != "$old_hash" ]]; then
-      log_message "INFO" "Detected changes in $env_file. Running extended Pi-hole validation..." "always"
+      log_message "ENV" "Detected changes in $env_file. Running extended Pi-hole validation..." "always"
       validate_piholes_after_env_changes
       echo "$current_hash" > "$ENV_CHECKSUM_FILE"
     else
-      log_message "INFO" "No changes in $env_file since last run. Skipping extended Pi-hole validation." "if_verbose"
+      log_message "ENV" "No changes in $env_file since last run. Skipping extended Pi-hole validation." "if_verbose"
     fi
   else
-    log_message "INFO" "No previous checksum found for $env_file. Running extended Pi-hole validation..." "always"
+    log_message "ENV" "No previous checksum found for $env_file. Running extended Pi-hole validation..." "always"
     validate_piholes_after_env_changes
     echo "$current_hash" > "$ENV_CHECKSUM_FILE"
   fi
