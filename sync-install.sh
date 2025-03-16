@@ -115,11 +115,22 @@ while [[ $# -gt 0 ]]; do
       usage
       ;;
     *)
-      echo -e "[${RED}ERROR${NC}] Unknown option: $1"
+      echo -e "[\033[1;31mERROR\033[0m] Unknown option: $1"
       usage
       ;;
   esac
 done
+
+#==============================================================================
+# Rotate Old Log & Start Logging
+# Keep one backup (sync-install.log.old) and create a fresh sync-install.log
+#==============================================================================
+LOGFILE="./sync-install.log"
+if [[ -f "$LOGFILE" ]]; then
+  mv "$LOGFILE" "${LOGFILE}.old"
+fi
+
+exec > >(tee -a "$LOGFILE") 2>&1
 
 #==============================================================================
 # run_cmd: Wrapper to run commands or simulate
@@ -209,6 +220,23 @@ fi
 if [[ -d "$CLONE_DIR/.git" ]]; then
   info "Directory '$CLONE_DIR' has .git; pulling latest changes..."
   run_cmd "cd \"$CLONE_DIR\" && git pull"
+
+  #============================================================================
+  # Check if sync-install.sh changed & optionally restart
+  #============================================================================
+  changed_files="$(git diff --name-only HEAD@{1} HEAD | grep sync-install.sh || true)"
+  if [[ -n "$changed_files" ]]; then
+    warn "A newer version of 'sync-install.sh' is now available."
+    prompt "Would you like to restart with the updated script? (y/N): "
+    read -r restart_choice
+    if [[ "$restart_choice" =~ ^[Yy]$ ]]; then
+      info "Re-running updated install script..."
+      exec "$0" "$@"
+    else
+      warn "Continuing with existing version of sync-install.sh."
+    fi
+  fi
+
 else
   info "Cloning repository from $REPO_URL into current directory..."
   run_cmd "git clone \"$REPO_URL\" ."
@@ -506,7 +534,7 @@ if [[ "$cron_choice" =~ ^[Yy]$ ]]; then
     echo -e "${CYAN}Options:${NC}"
     echo -e "  ${CYAN}A)${NC} Add a new line anyway"
     echo -e "  ${CYAN}R)${NC} Replace the existing line(s) with your new schedule"
-    echo -e "  ${CYAN}N)${NC} Do nothing (keep the old line, skip new one)"
+    echo -e "  ${CYAN}N)${NC} Do nothing (keep the existing line, skip new one)"
     echo -e "  ${CYAN}C)${NC} Cancel (abort installation)"
     prompt "Please select [A/R/N/C]: "
     read -r user_choice
@@ -573,3 +601,23 @@ else
     info "If you need to relocate files or create a symlink, re-run with --advanced."
   fi
 fi
+
+#==============================================================================
+# 12. Append .env to the Log without printing to console
+#==============================================================================
+if [[ -f "$ENV_PATH" ]]; then
+  info "Your final .env has been appended to the log: $LOGFILE (with passwords masked)."
+  echo "" >> "$LOGFILE"
+  echo "" >> "$LOGFILE"
+    echo "" >> "$LOGFILE"
+
+  # 2. Append a header
+  echo "=== Final .env (masked) ===" >> "$LOGFILE"
+
+  # 3. Read the .env file, mask the passwords, and append to the log
+  cat "$ENV_PATH" \
+    | sed -E 's/^(primary_pass=")[^"]*(")/\1*****\2/' \
+    | sed -E 's/^(.*secondary_passes=.*\().*(\).*)/\1*****\2/' \
+    >> "$LOGFILE"
+fi
+
