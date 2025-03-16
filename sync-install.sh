@@ -623,15 +623,12 @@ if [[ -f "$ENV_PATH" ]]; then
   info "Your final .env has been appended to the log: $LOGFILE (with passwords masked)."
   echo "" >> "$LOGFILE"
   echo "" >> "$LOGFILE"
-    echo "" >> "$LOGFILE"
-
-  # 2. Append a header
   echo "=== Final .env (masked) ===" >> "$LOGFILE"
-
-  # 3. Read the .env file, mask the passwords, and append to the log
+  echo "" >> "$LOGFILE"
+  
+  # Read the .env file, mask the passwords, and append to the log
   cat "$ENV_PATH" \
     | sed -E 's/^(primary_pass=")[^"]*(")/\1*****\2/' \
     | sed -E 's/^(.*secondary_passes=.*\().*(\).*)/\1*****\2/' \
     >> "$LOGFILE"
 fi
-
