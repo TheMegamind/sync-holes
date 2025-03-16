@@ -36,7 +36,8 @@
 #   03-05-2025      0.9.4    Initial Beta Release of Installation Script
 #   03-05-2025      0.9.5    Beta Release Candidate 0.9.5 (Debian-based)
 #   03-15-2025      0.9.6    Fixes for Fedora-based, and macOS installs
-#   03-15.2025      0.9.6.1  If no local .env exists, skip “newer .env available” prompt 
+#   03-15-2025      0.9.6.1  If no local .env exists, skip “newer .env available” prompt 
+#   03-16-2025      0.9.7    Check for newer install script, add logging, bump version #
 #
 # Usage:
 #   ./sync-install.sh [options]
