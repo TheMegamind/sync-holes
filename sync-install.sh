@@ -519,9 +519,15 @@ configure_piholes() {
     local passes_str="secondary_passes=("
 
     for (( j=0; j<${#second_names[@]}; j++ )); do
-      names_str+="\"${second_names[$j]}\" "
-      urls_str+="\"${second_urls[$j]}\" "
-      passes_str+="\"${second_passes[$j]}\" "
+      # Escape special characters in user input so parentheses won't break the shell
+      local escaped_name escaped_url escaped_pass
+      escaped_name=$(printf '%q' "${second_names[$j]}")
+      escaped_url=$(printf '%q' "${secondary_urls[$j]}")
+      escaped_pass=$(printf '%q' "${secondary_passes[$j]}")
+
+      names_str+="\"$escaped_name\" "
+      urls_str+="\"$escaped_url\" "
+      passes_str+="\"$escaped_pass\" "
     done
 
     names_str+=")"
@@ -534,9 +540,9 @@ configure_piholes() {
     run_cmd "sudo sed -i '/^secondary_passes=/d' \"$ENV_PATH\""
 
     # Insert them at the bottom or after the special line if needed
-    run_cmd "echo \"$names_str\" | sudo tee -a \"$ENV_PATH\""
-    run_cmd "echo \"$urls_str\" | sudo tee -a \"$ENV_PATH\""
-    run_cmd "echo \"$passes_str\" | sudo tee -a \"$ENV_PATH\""
+    run_cmd "echo $names_str | sudo tee -a \"$ENV_PATH\""
+    run_cmd "echo $urls_str | sudo tee -a \"$ENV_PATH\""
+    run_cmd "echo $passes_str | sudo tee -a \"$ENV_PATH\""
   fi
 
   info "Done configuring Pi-holes!"
