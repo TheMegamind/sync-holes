@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-
+SCRIPT_VERSION="0.9.7.2
 #
 # ===============================================================================
 #                            sync-install.sh
@@ -39,6 +39,7 @@
 #   03-15-2025      0.9.6.1  If no local .env exists, skip “newer .env available” prompt 
 #   03-16-2025      0.9.7    Check for newer install script, add logging, bump version #
 #   03-16-2025      0.9.7.1  Revise check for newer install script
+#   03-17-2025      0.9.7.2  Add Retry Options+ when Pi-hole config fails validation
 #
 # Usage:
 #   ./sync-install.sh [options]
@@ -160,6 +161,9 @@ prompt() {
   # Print a prompt in cyan
   echo -en "${CYAN}$*${NC}"
 }
+
+script_name=$(basename "$0")  #
+info "Running $(basename "$0") v${SCRIPT_VERSION}..."
 
 #==============================================================================
 # 1. Check for Dependencies
@@ -404,49 +408,150 @@ configure_piholes() {
       info "Configuring Pi-hole #$i (SECONDARY)"
     fi
 
-    prompt "Friendly Name: "
-    read -r friendly
-    prompt "URL (e.g. https://192.168.1.10:443): "
-    read -r pihole_url
-    prompt "Password (leave blank if none): "
-    read -r pihole_pass
+    # We’ll loop here until the user chooses to Accept, Skip, or Cancel
+    # (Retry is handled by re-prompting the same Pi-hole data)
+    local done_configuring=0
 
-    info "Validating Pi-hole #$i with a test auth..."
-    local curl_cmd="curl -s -S -k -X POST \"$pihole_url/api/auth\" -H \"Content-Type: application/json\" --data '{\"password\":\"$pihole_pass\"}'"
-    local response=''
+    while [[ $done_configuring -eq 0 ]]; do
+      prompt "Friendly Name: "
+      read -r friendly
+      prompt "URL (e.g. https://192.168.1.10:443): "
+      read -r pihole_url
+      prompt "Password (leave blank if none): "
+      read -r pihole_pass
 
-    if [[ $SIMULATE -eq 1 ]]; then
-      info "[SIMULATE] Would run: $curl_cmd"
-      response='{"session":{"valid":true,"sid":"fake","message":"password correct"}}'
+      info "Validating Pi-hole #$i with a test auth..."
+      local curl_cmd="curl -s -S -k -X POST \"$pihole_url/api/auth\" -H \"Content-Type: application/json\" --data '{\"password\":\"$pihole_pass\"}'"
+      local response=''
+
+      if [[ $SIMULATE -eq 1 ]]; then
+        info "[SIMULATE] Would run: $curl_cmd"
+        response='{"session":{"valid":true,"sid":"fake","message":"password correct"}}'
+      else
+        response=$(eval "$curl_cmd" 2>/dev/null || true)
+      fi
+
+      if [[ -z "$response" ]]; then
+        warn "No response from the API. Check your URL:port or SSL settings."
+        warn "Validation failed for Pi-hole #$i."
+      elif echo "$response" | grep -q '"valid":true'; then
+        info "Validation successful for $friendly!"
+      else
+        warn "Validation failed for Pi-hole #$i. Response: $response"
+      fi
+
+      # Now present the user with options
+      echo ""
+      echo -e "${CYAN}Validation attempt for Pi-hole #$i completed.${NC}"
+      echo -e "${CYAN}Choose an action:${NC}"
+      echo -e "  ${CYAN}R)${NC} Retry data entry for this Pi-hole"
+      echo -e "  ${CYAN}A)${NC} Accept these settings anyway (not recommended if validation failed)"
+      echo -e "  ${CYAN}S)${NC} Skip configuring this Pi-hole entirely"
+      echo -e "  ${CYAN}C)${NC} Cancel/quit installation"
+      prompt "[R/A/S/C]: "
+      read -r user_choice
+
+      case "$user_choice" in
+        [Rr])
+          # Re-prompt user for the same Pi-hole data
+          warn "Re-entering data for Pi-hole #$i..."
+          ;;
+        [Aa])
+          # Confirm with user
+          prompt "Are you sure you want to ACCEPT these settings for Pi-hole #$i? (y/N): "
+          read -r confirm_a
+          if [[ "$confirm_a" =~ ^[Yy]$ ]]; then
+            warn "Accepting data for Pi-hole #$i even though validation failed or was uncertain."
+            done_configuring=1
+          fi
+          ;;
+        [Ss])
+          # Confirm skip
+          prompt "Are you sure you want to SKIP Pi-hole #$i entirely? (y/N): "
+          read -r confirm_s
+          if [[ "$confirm_s" =~ ^[Yy]$ ]]; then
+            warn "Skipping configuration for Pi-hole #$i. This Pi-hole won't be added to .env."
+            # We'll set 'friendly' etc. to blank
+            friendly=""
+            pihole_url=""
+            pihole_pass=""
+            done_configuring=1
+          fi
+          ;;
+        [Cc])
+          # Confirm cancel
+          prompt "Are you sure you want to CANCEL the entire installation? (y/N): "
+          read -r confirm_c
+          if [[ "$confirm_c" =~ ^[Yy]$ ]]; then
+            warn "User chose to cancel installation. Exiting now."
+            exit 1
+          fi
+          ;;
+        *)
+          warn "Invalid choice. Please select [R/A/S/C]."
+          ;;
+      esac
+    done
+
+    # If the user ended up skipping this Pi-hole, friendly will be blank.
+    if [[ -n "$friendly" && -n "$pihole_url" ]]; then
+      # If it's the FIRST Pi-hole and not done yet, it’s primary
+      if (( i == 1 && primary_done == 0 )); then
+        run_cmd "sudo sed -i 's|^primary_name=.*|primary_name=\"$friendly\"|' \"$ENV_PATH\" || true"
+        run_cmd "sudo sed -i 's|^primary_url=.*|primary_url=\"$pihole_url\"|' \"$ENV_PATH\" || true"
+        run_cmd "sudo sed -i 's|^primary_pass=.*|primary_pass=\"$pihole_pass\"|' \"$ENV_PATH\" || true"
+        primary_done=1
+      else
+        # This is a secondary
+        second_names+=("$friendly")
+        second_urls+=("$pihole_url")
+        second_passes+=("$pihole_pass")
+      fi
     else
-      response=$(eval "$curl_cmd" 2>/dev/null || true)
-    fi
-
-    if [[ -z "$response" ]]; then
-      warn "No response from the API. Check your URL:port or SSL settings."
-      warn "We'll still record your entries, but it might not work."
-    fi
-
-    if echo "$response" | grep -q '"valid":true'; then
-      info "Validation successful for $friendly!"
-    else
-      warn "Validation failed for Pi-hole #$i. Response: $response"
-      warn "We'll still record your entries, but be aware it might not work."
-    fi
-
-    if (( i == 1 && primary_done == 0 )); then
-      # Primary lines
-      run_cmd "sudo sed -i 's|^primary_name=.*|primary_name=\"$friendly\"|' \"$ENV_PATH\" || true"
-      run_cmd "sudo sed -i 's|^primary_url=.*|primary_url=\"$pihole_url\"|' \"$ENV_PATH\" || true"
-      run_cmd "sudo sed -i 's|^primary_pass=.*|primary_pass=\"$pihole_pass\"|' \"$ENV_PATH\" || true"
-      primary_done=1
-    else
-      # Collect secondaries
-      second_names+=("$friendly")
-      second_urls+=("$pihole_url")
-      second_passes+=("$pihole_pass")
+      # User skipped, so do not record anything for this Pi-hole
+      warn "Pi-hole #$i was skipped. No data recorded in .env."
     fi
   done
+
+  # If we have more than 1 Pi-hole, set up secondary arrays
+  if (( pi_count > 1 )); then
+    local names_str="secondary_names=("
+    local urls_str="secondary_urls=("
+    local passes_str="secondary_passes=("
+
+    for (( j=0; j<${#second_names[@]}; j++ )); do
+      names_str+="\"${second_names[$j]}\" "
+      urls_str+="\"${second_urls[$j]}\" "
+      passes_str+="\"${second_passes[$j]}\" "
+    done
+
+    names_str+=")"
+    urls_str+=")"
+    passes_str+=")"
+
+    # Remove old lines, then append
+    run_cmd "sudo sed -i '/^secondary_names=/d' \"$ENV_PATH\""
+    run_cmd "sudo sed -i '/^secondary_urls=/d' \"$ENV_PATH\""
+    run_cmd "sudo sed -i '/^secondary_passes=/d' \"$ENV_PATH\""
+
+    run_cmd "echo \"$names_str\" | sudo tee -a \"$ENV_PATH\""
+    run_cmd "echo \"$urls_str\" | sudo tee -a \"$ENV_PATH\""
+    run_cmd "echo \"$passes_str\" | sudo tee -a \"$ENV_PATH\""
+  fi
+
+  info "Done configuring Pi-holes!"
+}
+
+if [[ "$config_choice" =~ ^[Yy]$ ]]; then
+  if [[ $SIMULATE -eq 1 ]]; then
+    info "[SIMULATE] Would configure Pi-holes by prompting user..."
+  else
+    configure_piholes
+  fi
+else
+  # NEW: Let user know "No" means existing config remains
+  info "Skipping Pi-hole configuration. Any existing Pi-hole settings in $ENV_PATH will remain unchanged."
+fi
 
 #============================================================================
 #   If pi_count>1, remove old secondary lines and insert new lines
