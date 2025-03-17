@@ -508,7 +508,11 @@ configure_piholes() {
     fi
   done
 
-  # If we have more than 1 Pi-hole, set up secondary arrays
+  # ---------------------------------------------------------------------------
+  # Insert Secondary Arrays Below:
+  #   "# ** DO NOT REMOVE OR MODIFY THIS LINE — INSTALL SCRIPT INSERTS DATA BELOW **"
+  # but only if pi_count > 1
+  # ---------------------------------------------------------------------------
   if (( pi_count > 1 )); then
     local names_str="secondary_names=("
     local urls_str="secondary_urls=("
@@ -529,6 +533,7 @@ configure_piholes() {
     run_cmd "sudo sed -i '/^secondary_urls=/d' \"$ENV_PATH\""
     run_cmd "sudo sed -i '/^secondary_passes=/d' \"$ENV_PATH\""
 
+    # Insert them at the bottom or after the special line if needed
     run_cmd "echo \"$names_str\" | sudo tee -a \"$ENV_PATH\""
     run_cmd "echo \"$urls_str\" | sudo tee -a \"$ENV_PATH\""
     run_cmd "echo \"$passes_str\" | sudo tee -a \"$ENV_PATH\""
@@ -544,60 +549,6 @@ if [[ "$config_choice" =~ ^[Yy]$ ]]; then
     configure_piholes
   fi
 else
-  info "Skipping Pi-hole configuration. Any existing Pi-hole settings in $ENV_PATH will remain unchanged."
-fi
-
-#============================================================================
-#   If pi_count>1, remove old secondary lines and insert new lines
-#   directly under the line containing:
-#   "# ** DO NOT REMOVE OR MODIFY THIS LINE — INSTALL SCRIPT INSERTS DATA BELOW **"
-#   If pi_count==1, do NOTHING (no removal or insertion).
-#============================================================================
-if (( pi_count > 1 )); then
-  local names_str='secondary_names=('
-  local urls_str='secondary_urls=('
-  local passes_str='secondary_passes=('
-
-  for (( j=0; j<${#second_names[@]}; j++ )); do
-    names_str+="\"${second_names[$j]}\" "
-    urls_str+="\"${second_urls[$j]}\" "
-    passes_str+="\"${second_passes[$j]}\" "
-  done
-
-  names_str+=')'
-  urls_str+=')'
-  passes_str+=')'
-
-  # Remove old secondary_ lines
-  run_cmd "sudo sed -i '/^secondary_names=/d' \"$ENV_PATH\""
-  run_cmd "sudo sed -i '/^secondary_urls=/d' \"$ENV_PATH\""
-  run_cmd "sudo sed -i '/^secondary_passes=/d' \"$ENV_PATH\""
-
-  # Build a temp file containing the new lines
-  local temp_file
-  temp_file="$(mktemp)"
-  echo "$names_str"   >  "$temp_file"
-  echo "$urls_str"    >> "$temp_file"
-  echo "$passes_str"  >> "$temp_file"
-
-  # Insert them right after the line with:
-  # ** DO NOT REMOVE OR MODIFY THIS LINE — INSTALL SCRIPT INSERTS DATA BELOW **
-  run_cmd "sudo sed -i '/^# \*\* DO NOT REMOVE OR MODIFY THIS LINE/r $temp_file' \"$ENV_PATH\""
-
-  run_cmd "rm -f \"$temp_file\""
-fi
-
-info "Done configuring Pi-holes!"
-}
-
-if [[ "$config_choice" =~ ^[Yy]$ ]]; then
-  if [[ $SIMULATE -eq 1 ]]; then
-    info "[SIMULATE] Would configure Pi-holes by prompting user..."
-  else
-    configure_piholes
-  fi
-else
-  # NEW: Let user know "No" means existing config remains
   info "Skipping Pi-hole configuration. Any existing Pi-hole settings in $ENV_PATH will remain unchanged."
 fi
 
