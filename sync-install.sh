@@ -508,7 +508,7 @@ configure_piholes() {
     fi
   done
 
-  # ---------------------------------------------------------------------------
+   # ---------------------------------------------------------------------------
   # Insert Secondary Arrays Below:
   #   "# ** DO NOT REMOVE OR MODIFY THIS LINE — INSTALL SCRIPT INSERTS DATA BELOW **"
   # but only if pi_count > 1
@@ -539,9 +539,14 @@ configure_piholes() {
     run_cmd "sudo sed -i '/^secondary_urls=/d' \"$ENV_PATH\""
     run_cmd "sudo sed -i '/^secondary_passes=/d' \"$ENV_PATH\""
 
-    # Insert them at the bottom or after the special line if needed
+    # --- Debug lines to show exactly what gets passed to eval ---
+    echo "[DEBUG] About to run (names):  echo $names_str | sudo tee -a \"$ENV_PATH\"" 1>&2
     run_cmd "echo $names_str | sudo tee -a \"$ENV_PATH\""
+
+    echo "[DEBUG] About to run (urls):   echo $urls_str | sudo tee -a \"$ENV_PATH\"" 1>&2
     run_cmd "echo $urls_str | sudo tee -a \"$ENV_PATH\""
+
+    echo "[DEBUG] About to run (passes): echo $passes_str | sudo tee -a \"$ENV_PATH\"" 1>&2
     run_cmd "echo $passes_str | sudo tee -a \"$ENV_PATH\""
   fi
 
