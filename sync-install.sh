@@ -510,7 +510,7 @@ configure_piholes() {
 
   # ---------------------------------------------------------------------------
   # Insert Secondary Arrays Below:
-  #   "# ** DO NOT REMOVE OR MODIFY THIS LINE — INSTALL SCRIPT INSERTS DATA BELOW **"
+  #   "# ** DO NOT REMOVE OR MODIFY THIS LINE - INSTALL SCRIPT INSERTS DATA BELOW **"
   # but only if pi_count > 1
   # ---------------------------------------------------------------------------
   if (( pi_count > 1 )); then
