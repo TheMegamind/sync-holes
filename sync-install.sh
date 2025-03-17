@@ -408,8 +408,6 @@ configure_piholes() {
       info "Configuring Pi-hole #$i (SECONDARY)"
     fi
 
-    # We’ll loop here until the user chooses to Accept, Skip, or Cancel
-    # (Retry is handled by re-prompting the same Pi-hole data)
     local done_configuring=0
 
     while [[ $done_configuring -eq 0 ]]; do
@@ -431,84 +429,81 @@ configure_piholes() {
         response=$(eval "$curl_cmd" 2>/dev/null || true)
       fi
 
-      if [[ -z "$response" ]]; then
-        warn "No response from the API. Check your URL:port or SSL settings."
-        warn "Validation failed for Pi-hole #$i."
-      elif echo "$response" | grep -q '"valid":true'; then
+      # Check if validation succeeded
+      if [[ -n "$response" ]] && echo "$response" | grep -q '"valid":true'; then
         info "Validation successful for $friendly!"
+        # Immediately store data and break from loop
+        done_configuring=1
       else
-        warn "Validation failed for Pi-hole #$i. Response: $response"
+        # Validation failed
+        if [[ -z "$response" ]]; then
+          warn "No response from the API. Check your URL:port or SSL settings."
+        else
+          warn "Validation failed for Pi-hole #$i. Response: $response"
+        fi
+
+        echo -e "${CYAN}Choose an action:${NC}"
+        echo -e "  ${CYAN}R)${NC} Retry data entry for this Pi-hole"
+        echo -e "  ${CYAN}A)${NC} Accept these settings anyway? (NOT RECOMMENDED)"
+        echo -e "  ${CYAN}S)${NC} Skip configuring this Pi-hole entirely"
+        echo -e "  ${CYAN}C)${NC} Cancel/quit installation"
+        prompt "[R/A/S/C]: "
+        read -r user_choice
+
+        case "$user_choice" in
+          [Rr])
+            warn "Re-entering data for Pi-hole #$i..."
+            ;;
+          [Aa])
+            prompt "Are you sure you want to ACCEPT these settings for Pi-hole #$i? (y/N): "
+            read -r confirm_a
+            if [[ "$confirm_a" =~ ^[Yy]$ ]]; then
+              warn "Accepting data for Pi-hole #$i even though validation failed."
+              done_configuring=1
+            fi
+            ;;
+          [Ss])
+            prompt "Are you sure you want to SKIP Pi-hole #$i entirely? (y/N): "
+            read -r confirm_s
+            if [[ "$confirm_s" =~ ^[Yy]$ ]]; then
+              warn "Skipping configuration for Pi-hole #$i. This Pi-hole won't be added to .env."
+              # We'll set 'friendly' etc. to blank
+              friendly=""
+              pihole_url=""
+              pihole_pass=""
+              done_configuring=1
+            fi
+            ;;
+          [Cc])
+            prompt "Are you sure you want to CANCEL the entire installation? (y/N): "
+            read -r confirm_c
+            if [[ "$confirm_c" =~ ^[Yy]$ ]]; then
+              warn "User chose to cancel installation. Exiting now."
+              exit 1
+            fi
+            ;;
+          *)
+            warn "Invalid choice. Please select [R/A/S/C]."
+            ;;
+        esac
       fi
-
-      # Now present the user with options
-      echo ""
-      echo -e "${CYAN}Validation attempt for Pi-hole #$i completed.${NC}"
-      echo -e "${CYAN}Choose an action:${NC}"
-      echo -e "  ${CYAN}R)${NC} Retry data entry for this Pi-hole"
-      echo -e "  ${CYAN}A)${NC} Accept these settings anyway (not recommended if validation failed)"
-      echo -e "  ${CYAN}S)${NC} Skip configuring this Pi-hole entirely"
-      echo -e "  ${CYAN}C)${NC} Cancel/quit installation"
-      prompt "[R/A/S/C]: "
-      read -r user_choice
-
-      case "$user_choice" in
-        [Rr])
-          # Re-prompt user for the same Pi-hole data
-          warn "Re-entering data for Pi-hole #$i..."
-          ;;
-        [Aa])
-          # Confirm with user
-          prompt "Are you sure you want to ACCEPT these settings for Pi-hole #$i? (y/N): "
-          read -r confirm_a
-          if [[ "$confirm_a" =~ ^[Yy]$ ]]; then
-            warn "Accepting data for Pi-hole #$i even though validation failed or was uncertain."
-            done_configuring=1
-          fi
-          ;;
-        [Ss])
-          # Confirm skip
-          prompt "Are you sure you want to SKIP Pi-hole #$i entirely? (y/N): "
-          read -r confirm_s
-          if [[ "$confirm_s" =~ ^[Yy]$ ]]; then
-            warn "Skipping configuration for Pi-hole #$i. This Pi-hole won't be added to .env."
-            # We'll set 'friendly' etc. to blank
-            friendly=""
-            pihole_url=""
-            pihole_pass=""
-            done_configuring=1
-          fi
-          ;;
-        [Cc])
-          # Confirm cancel
-          prompt "Are you sure you want to CANCEL the entire installation? (y/N): "
-          read -r confirm_c
-          if [[ "$confirm_c" =~ ^[Yy]$ ]]; then
-            warn "User chose to cancel installation. Exiting now."
-            exit 1
-          fi
-          ;;
-        *)
-          warn "Invalid choice. Please select [R/A/S/C]."
-          ;;
-      esac
     done
 
-    # If the user ended up skipping this Pi-hole, friendly will be blank.
+    # If the user ended up skipping this Pi-hole, 'friendly' will be blank.
     if [[ -n "$friendly" && -n "$pihole_url" ]]; then
-      # If it's the FIRST Pi-hole and not done yet, it’s primary
+      # If it's the first Pi-hole and not done yet, it’s primary
       if (( i == 1 && primary_done == 0 )); then
         run_cmd "sudo sed -i 's|^primary_name=.*|primary_name=\"$friendly\"|' \"$ENV_PATH\" || true"
         run_cmd "sudo sed -i 's|^primary_url=.*|primary_url=\"$pihole_url\"|' \"$ENV_PATH\" || true"
         run_cmd "sudo sed -i 's|^primary_pass=.*|primary_pass=\"$pihole_pass\"|' \"$ENV_PATH\" || true"
         primary_done=1
       else
-        # This is a secondary
         second_names+=("$friendly")
         second_urls+=("$pihole_url")
         second_passes+=("$pihole_pass")
       fi
     else
-      # User skipped, so do not record anything for this Pi-hole
+      # User explicitly skipped
       warn "Pi-hole #$i was skipped. No data recorded in .env."
     fi
   done
@@ -549,7 +544,6 @@ if [[ "$config_choice" =~ ^[Yy]$ ]]; then
     configure_piholes
   fi
 else
-  # NEW: Let user know "No" means existing config remains
   info "Skipping Pi-hole configuration. Any existing Pi-hole settings in $ENV_PATH will remain unchanged."
 fi
 
