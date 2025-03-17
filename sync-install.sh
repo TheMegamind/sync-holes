@@ -508,7 +508,7 @@ configure_piholes() {
     fi
   done
 
-   # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
   # Insert Secondary Arrays Below:
   #   "# ** DO NOT REMOVE OR MODIFY THIS LINE — INSTALL SCRIPT INSERTS DATA BELOW **"
   # but only if pi_count > 1
@@ -519,11 +519,11 @@ configure_piholes() {
     local passes_str="secondary_passes=("
 
     for (( j=0; j<${#second_names[@]}; j++ )); do
-      # Escape special characters in user input so parentheses won't break the shell
+      # Escape special characters so parentheses won't break the shell
       local escaped_name escaped_url escaped_pass
       escaped_name=$(printf '%q' "${second_names[$j]}")
-      escaped_url=$(printf '%q' "${secondary_urls[$j]}")
-      escaped_pass=$(printf '%q' "${secondary_passes[$j]}")
+      escaped_url=$(printf '%q' "${second_urls[$j]}")
+      escaped_pass=$(printf '%q' "${second_passes[$j]}")
 
       names_str+="\"$escaped_name\" "
       urls_str+="\"$escaped_url\" "
@@ -534,24 +534,25 @@ configure_piholes() {
     urls_str+=")"
     passes_str+=")"
 
-    # Remove old lines, then append
+    # Remove old secondary_* lines
     run_cmd "sudo sed -i '/^secondary_names=/d' \"$ENV_PATH\""
     run_cmd "sudo sed -i '/^secondary_urls=/d' \"$ENV_PATH\""
     run_cmd "sudo sed -i '/^secondary_passes=/d' \"$ENV_PATH\""
 
-    # --- Debug lines to show exactly what gets passed to eval ---
-    echo "[DEBUG] About to run (names):  echo $names_str | sudo tee -a \"$ENV_PATH\"" 1>&2
-    run_cmd "echo $names_str | sudo tee -a \"$ENV_PATH\""
+    # Write them to a temp file, then pipe into tee (avoids eval expansions)
+    local temp_file
+    temp_file="$(mktemp)"
+    echo "$names_str" >> "$temp_file"
+    echo "$urls_str"  >> "$temp_file"
+    echo "$passes_str" >> "$temp_file"
 
-    echo "[DEBUG] About to run (urls):   echo $urls_str | sudo tee -a \"$ENV_PATH\"" 1>&2
-    run_cmd "echo $urls_str | sudo tee -a \"$ENV_PATH\""
-
-    echo "[DEBUG] About to run (passes): echo $passes_str | sudo tee -a \"$ENV_PATH\"" 1>&2
-    run_cmd "echo $passes_str | sudo tee -a \"$ENV_PATH\""
+    run_cmd "cat \"$temp_file\" | sudo tee -a \"$ENV_PATH\""
+    rm -f "$temp_file"
   fi
 
   info "Done configuring Pi-holes!"
 }
+
 
 if [[ "$config_choice" =~ ^[Yy]$ ]]; then
   if [[ $SIMULATE -eq 1 ]]; then
