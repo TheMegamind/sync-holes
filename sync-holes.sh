@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-SCRIPT_VERSION="0.9.6.3"
+SCRIPT_VERSION="0.9.7"
 #
 # ===============================================================================
 #                            sync-holes.sh
@@ -44,6 +44,7 @@ SCRIPT_VERSION="0.9.6.3"
 #   03-15-2025    0.9.6.1  Expand checks for valid JSON and added error handling
 #   03-15-2025    0.9.6.2  Tweak Error Messages for invalid JSON response
 #   03-15-2025    0.9.6.3  Add validation of Pi-hole Configuration changes
+#   03-15-2025    0.9.7    Bump Version # for newest release
 #
 # ===============================================================================
 #
