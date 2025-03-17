@@ -519,15 +519,26 @@ if (( pi_count > 1 )); then
   local passes_str="secondary_passes=("
 
   for (( j=0; j<${#second_names[@]}; j++ )); do
-    # Escape special characters in user input so parentheses won't break the shell
-    local escaped_name escaped_url escaped_pass
-    escaped_name=$(printf '%q' "${second_names[$j]}")
-    escaped_url=$(printf '%q' "${second_urls[$j]}")
-    escaped_pass=$(printf '%q' "${secondary_passes[$j]}")
 
-    names_str+="\"$escaped_name\" "
-    urls_str+="\"$escaped_url\" "
-    passes_str+="\"$escaped_pass\" "
+    # Minimal escaping for quotes and backslashes in user input:
+    #  1) Replace backslash with double-backslash
+    #  2) Replace " with \"
+    local raw_name="${second_names[$j]}"
+    local raw_url="${second_urls[$j]}"
+    local raw_pass="${second_passes[$j]}"
+
+    local esc_name
+    local esc_url
+    local esc_pass
+
+    esc_name="$(echo "$raw_name" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+    esc_url="$(echo "$raw_url"  | sed 's/\\/\\\\/g; s/"/\\"/g')"
+    esc_pass="$(echo "$raw_pass" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+
+    # Add them (quoted) into the array lines
+    names_str+="\"$esc_name\" "
+    urls_str+="\"$esc_url\" "
+    passes_str+="\"$esc_pass\" "
   done
 
   names_str+=")"
@@ -546,15 +557,9 @@ if (( pi_count > 1 )); then
   echo "$urls_str"   >> "$temp_file"
   echo "$passes_str" >> "$temp_file"
 
-  # Insert them right after the special comment line
-  # (Adjust the sed pattern if the comment differs in your .env)
-  run_cmd "sudo sed -i '/^# \\*\\* DO NOT REMOVE OR MODIFY THIS LINE/r $temp_file' \"$ENV_PATH\""
-
-  rm -f "$temp_file"
-fi
-
-info "Done configuring Pi-holes!"
-}
+  # Insert them right after the special comment line:
+  # ** DO NOT REMOVE OR MODIFY THIS LINE — INSTALL SCRIPT INSERTS DATA BELOW **
+  # (Be sure th
 
 if [[ "$config_choice" =~ ^[Yy]$ ]]; then
   if [[ $SIMULATE -eq 1 ]]; then
