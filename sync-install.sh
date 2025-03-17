@@ -559,7 +559,14 @@ if (( pi_count > 1 )); then
 
   # Insert them right after the special comment line:
   # ** DO NOT REMOVE OR MODIFY THIS LINE — INSTALL SCRIPT INSERTS DATA BELOW **
-  # (Be sure th
+  # (Be sure this comment line in your .env matches exactly!)
+  run_cmd "sudo sed -i '/^# \\*\\* DO NOT REMOVE OR MODIFY THIS LINE/r $temp_file' \"$ENV_PATH\""
+
+  rm -f "$temp_file"
+fi
+
+info "Done configuring Pi-holes!"
+}
 
 if [[ "$config_choice" =~ ^[Yy]$ ]]; then
   if [[ $SIMULATE -eq 1 ]]; then
