@@ -519,48 +519,41 @@ if (( pi_count > 1 )); then
   local passes_str="secondary_passes=("
 
   for (( j=0; j<${#second_names[@]}; j++ )); do
-
-    # Minimal escaping for quotes and backslashes in user input:
-    #  1) Replace backslash with double-backslash
-    #  2) Replace " with \"
+    # Original user input
     local raw_name="${second_names[$j]}"
     local raw_url="${second_urls[$j]}"
     local raw_pass="${second_passes[$j]}"
 
-    local esc_name
-    local esc_url
-    local esc_pass
+    # Only escape double quotes in user input (e.g., if they typed " or \")
+    # so that your .env remains valid shell syntax:
+    raw_name="${raw_name//\"/\\\"}"
+    raw_url="${raw_url//\"/\\\"}"
+    raw_pass="${raw_pass//\"/\\\"}"
 
-    esc_name="$(echo "$raw_name" | sed 's/\\/\\\\/g; s/"/\\"/g')"
-    esc_url="$(echo "$raw_url"  | sed 's/\\/\\\\/g; s/"/\\"/g')"
-    esc_pass="$(echo "$raw_pass" | sed 's/\\/\\\\/g; s/"/\\"/g')"
-
-    # Add them (quoted) into the array lines
-    names_str+="\"$esc_name\" "
-    urls_str+="\"$esc_url\" "
-    passes_str+="\"$esc_pass\" "
+    names_str+="\"$raw_name\" "
+    urls_str+="\"$raw_url\" "
+    passes_str+="\"$raw_pass\" "
   done
 
   names_str+=")"
   urls_str+=")"
   passes_str+=")"
 
-  # Remove any old secondary_ lines
+  # Remove any old secondary_ lines from .env
   run_cmd "sudo sed -i '/^secondary_names=/d' \"$ENV_PATH\""
   run_cmd "sudo sed -i '/^secondary_urls=/d' \"$ENV_PATH\""
   run_cmd "sudo sed -i '/^secondary_passes=/d' \"$ENV_PATH\""
 
-  # Build a temporary file containing the new lines
+  # Build a temporary file with new lines
   local temp_file
   temp_file="$(mktemp)"
   echo "$names_str"  >> "$temp_file"
   echo "$urls_str"   >> "$temp_file"
   echo "$passes_str" >> "$temp_file"
 
-  # Insert them right after the special comment line:
+  # Insert them right after the line:
   # ** DO NOT REMOVE OR MODIFY THIS LINE — INSTALL SCRIPT INSERTS DATA BELOW **
-  # (Be sure this comment line in your .env matches exactly!)
-  run_cmd "sudo sed -i '/^# \\*\\* DO NOT REMOVE OR MODIFY THIS LINE/r $temp_file' \"$ENV_PATH\""
+  run_cmd "sudo sed -i '/^# \\*\\* DO NOT REMOVE OR MODIFY THIS LINE - INSTALL SCRIPT INSERTS DATA BELOW/r $temp_file' \"$ENV_PATH\""
 
   rm -f "$temp_file"
 fi
