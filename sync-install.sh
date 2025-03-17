@@ -508,51 +508,53 @@ configure_piholes() {
     fi
   done
 
-  # ---------------------------------------------------------------------------
-  # Insert Secondary Arrays Below:
-  #   "# ** DO NOT REMOVE OR MODIFY THIS LINE - INSTALL SCRIPT INSERTS DATA BELOW **"
-  # but only if pi_count > 1
-  # ---------------------------------------------------------------------------
-  if (( pi_count > 1 )); then
-    local names_str="secondary_names=("
-    local urls_str="secondary_urls=("
-    local passes_str="secondary_passes=("
+# ---------------------------------------------------------------------------
+# Insert Secondary Arrays Below:
+#   "# ** DO NOT REMOVE OR MODIFY THIS LINE — INSTALL SCRIPT INSERTS DATA BELOW **"
+# but only if pi_count > 1
+# ---------------------------------------------------------------------------
+if (( pi_count > 1 )); then
+  local names_str="secondary_names=("
+  local urls_str="secondary_urls=("
+  local passes_str="secondary_passes=("
 
-    for (( j=0; j<${#second_names[@]}; j++ )); do
-      # Escape special characters so parentheses won't break the shell
-      local escaped_name escaped_url escaped_pass
-      escaped_name=$(printf '%q' "${second_names[$j]}")
-      escaped_url=$(printf '%q' "${second_urls[$j]}")
-      escaped_pass=$(printf '%q' "${second_passes[$j]}")
+  for (( j=0; j<${#second_names[@]}; j++ )); do
+    # Escape special characters in user input so parentheses won't break the shell
+    local escaped_name escaped_url escaped_pass
+    escaped_name=$(printf '%q' "${second_names[$j]}")
+    escaped_url=$(printf '%q' "${second_urls[$j]}")
+    escaped_pass=$(printf '%q' "${secondary_passes[$j]}")
 
-      names_str+="\"$escaped_name\" "
-      urls_str+="\"$escaped_url\" "
-      passes_str+="\"$escaped_pass\" "
-    done
+    names_str+="\"$escaped_name\" "
+    urls_str+="\"$escaped_url\" "
+    passes_str+="\"$escaped_pass\" "
+  done
 
-    names_str+=")"
-    urls_str+=")"
-    passes_str+=")"
+  names_str+=")"
+  urls_str+=")"
+  passes_str+=")"
 
-    # Remove old secondary_* lines
-    run_cmd "sudo sed -i '/^secondary_names=/d' \"$ENV_PATH\""
-    run_cmd "sudo sed -i '/^secondary_urls=/d' \"$ENV_PATH\""
-    run_cmd "sudo sed -i '/^secondary_passes=/d' \"$ENV_PATH\""
+  # Remove any old secondary_ lines
+  run_cmd "sudo sed -i '/^secondary_names=/d' \"$ENV_PATH\""
+  run_cmd "sudo sed -i '/^secondary_urls=/d' \"$ENV_PATH\""
+  run_cmd "sudo sed -i '/^secondary_passes=/d' \"$ENV_PATH\""
 
-    # Write them to a temp file, then pipe into tee (avoids eval expansions)
-    local temp_file
-    temp_file="$(mktemp)"
-    echo "$names_str" >> "$temp_file"
-    echo "$urls_str"  >> "$temp_file"
-    echo "$passes_str" >> "$temp_file"
+  # Build a temporary file containing the new lines
+  local temp_file
+  temp_file="$(mktemp)"
+  echo "$names_str"  >> "$temp_file"
+  echo "$urls_str"   >> "$temp_file"
+  echo "$passes_str" >> "$temp_file"
 
-    run_cmd "cat \"$temp_file\" | sudo tee -a \"$ENV_PATH\""
-    rm -f "$temp_file"
-  fi
+  # Insert them right after the special comment line
+  # (Adjust the sed pattern if the comment differs in your .env)
+  run_cmd "sudo sed -i '/^# \\*\\* DO NOT REMOVE OR MODIFY THIS LINE/r $temp_file' \"$ENV_PATH\""
 
-  info "Done configuring Pi-holes!"
+  rm -f "$temp_file"
+fi
+
+info "Done configuring Pi-holes!"
 }
-
 
 if [[ "$config_choice" =~ ^[Yy]$ ]]; then
   if [[ $SIMULATE -eq 1 ]]; then
