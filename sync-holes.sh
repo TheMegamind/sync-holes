@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-SCRIPT_VERSION="0.9.7"
+SCRIPT_VERSION="0.9.7.1"
 #
 # ===============================================================================
 #                            sync-holes.sh
@@ -45,6 +45,7 @@ SCRIPT_VERSION="0.9.7"
 #   03-15-2025    0.9.6.2  Tweak Error Messages for invalid JSON response
 #   03-15-2025    0.9.6.3  Add validation of Pi-hole Configuration changes
 #   03-15-2025    0.9.7    Bump Version # for newest release
+#   03-17-2025    0.9.7.1  Remove Session Files when Configuration changes
 #
 # ===============================================================================
 #
@@ -487,6 +488,15 @@ remove_file() {
 }
 
 # =======================================
+# Remove Session Files 
+# Called when .env has changed
+# =======================================
+remove_session_files() {
+  log_message "ENV" "Removing old session files to avoid mismatches..." "always"
+  rm -f "$temp_files_path/primary-session.json" "$temp_files_path/secondary-session_"*.json 2>/dev/null || true
+}
+
+# =======================================
 # Cleanup Temporary Files on Exit Function
 # =======================================
 cleanup() {
@@ -847,14 +857,28 @@ check_env_changes() {
 
     if [[ "$current_hash" != "$old_hash" ]]; then
       log_message "ENV" "Detected changes in $env_file. Running extended Pi-hole validation..." "always"
+      
+      # 1) Remove old session files so we re-auth with the new environment
+      remove_session_files
+      
+      # 2) Optionally do an extended test-auth validation
       validate_piholes_after_env_changes
+      
+      # 3) Save the new checksum
       echo "$current_hash" > "$ENV_CHECKSUM_FILE"
     else
       log_message "ENV" "No changes in $env_file since last run. Skipping extended Pi-hole validation." "if_verbose"
     fi
   else
     log_message "ENV" "No previous checksum found for $env_file. Running extended Pi-hole validation..." "always"
+    
+    # 1) Remove old sessions
+    remove_session_files
+    
+    # 2) Optionally do your test-auth calls
     validate_piholes_after_env_changes
+    
+    # 3) Save new hash
     echo "$current_hash" > "$ENV_CHECKSUM_FILE"
   fi
 }
