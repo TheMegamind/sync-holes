@@ -283,7 +283,7 @@ check_dependencies() {
         missing_deps+=("'curl'")
     fi
 
-    # NEW: Attempt to auto-install if missing. Then re-check. Debian, Fedora, macOS only.
+    # Attempt to auto-install if missing. Then re-check. Debian, Fedora, macOS only.
     if [ ${#missing_deps[@]} -ne 0 ]; then
         log_message "INFO" "Detected missing dependencies: ${missing_deps[*]}."
 
@@ -492,7 +492,7 @@ remove_file() {
 # Called when .env has changed
 # =======================================
 remove_session_files() {
-  log_message "ENV" "Removing old session files to avoid mismatches..." "always"
+  log_message "ENV" "Removing any existing session files..." "always"
   rm -f "$temp_files_path/primary-session.json" "$temp_files_path/secondary-session_"*.json 2>/dev/null || true
 }
 
@@ -784,7 +784,7 @@ upload_teleporter_file() {
 }
 
 ################################################################################
-#         NEW: On-demand Pi-hole Validation if .env changes (Checksums)
+#Remove Existing Session Files & Revalidate Pi-holes if .env changes (Checksums)
 ################################################################################
 
 ENV_CHECKSUM_FILE="${env_file}.sha256"
@@ -857,29 +857,17 @@ check_env_changes() {
 
     if [[ "$current_hash" != "$old_hash" ]]; then
       log_message "ENV" "Detected changes in $env_file. Running extended Pi-hole validation..." "always"
-      
-      # 1) Remove old session files so we re-auth with the new environment
-      remove_session_files
-      
-      # 2) Optionally do an extended test-auth validation
-      validate_piholes_after_env_changes
-      
-      # 3) Save the new checksum
-      echo "$current_hash" > "$ENV_CHECKSUM_FILE"
+      remove_session_files                          # Remove old session files to avoid mismatches
+      validate_piholes_after_env_changes            # Do an extended test-auth validation    
+      echo "$current_hash" > "$ENV_CHECKSUM_FILE"   # Save the new checksum
     else
       log_message "ENV" "No changes in $env_file since last run. Skipping extended Pi-hole validation." "if_verbose"
     fi
   else
     log_message "ENV" "No previous checksum found for $env_file. Running extended Pi-hole validation..." "always"
-    
-    # 1) Remove old sessions
-    remove_session_files
-    
-    # 2) Optionally do your test-auth calls
-    validate_piholes_after_env_changes
-    
-    # 3) Save new hash
-    echo "$current_hash" > "$ENV_CHECKSUM_FILE"
+    remove_session_files                          # Remove old session files to avoid mismatches
+    validate_piholes_after_env_changes            # Do an extended test-auth validation    
+    echo "$current_hash" > "$ENV_CHECKSUM_FILE"   # Save the new checksum
   fi
 }
 
