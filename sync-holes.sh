@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-SCRIPT_VERSION="0.9.7.1"
+SCRIPT_VERSION="0.9.7.2"
 #
 # ===============================================================================
 #                            sync-holes.sh
@@ -46,6 +46,7 @@ SCRIPT_VERSION="0.9.7.1"
 #   03-15-2025    0.9.6.3  Add validation of Pi-hole Configuration changes
 #   03-15-2025    0.9.7    Bump Version # for newest release
 #   03-17-2025    0.9.7.1  Remove Session Files when Configuration changes
+#   03-21-2025    0.9.7.2  Clean-Up & Reorganize Code
 #
 # ===============================================================================
 #
@@ -82,11 +83,11 @@ declare -r default_curl_error_log="$default_temp_files_path/curl_error_log.log"
 declare -r auth_response_file="$default_temp_files_path/auth_response.json"
 
 ################################################################################
-#                           ENVIRONMENT & LOGGING
+#                          LOGGING & ERROR HANDLING
 ################################################################################
 
 # =======================================
-# Logging & Print output functions
+# Message Logging & Print Output
 # =======================================
 # Arguments:
 #   $1 - Tag (e.g., INFO, DEBUG, ERROR)
@@ -141,9 +142,27 @@ log_message() {
 }
 
 # =======================================
-# Mask Sensitive Data Function
+# Error Handling
 # =======================================
-# Masks sensitive information like passwords and session IDs in logs.
+handle_error() {
+    local message="$1"
+    verbose=1
+
+    if [ -s "$curl_error_log" ]; then
+        log_message "ERROR" "$(cat "$curl_error_log")" "always" "red"
+        rm -f "$curl_error_log"
+    else
+        log_message "ERROR" "$message" "always" "red"
+    fi
+
+    exit 1
+}
+
+# =======================================
+# Logging Helper Functions
+# =======================================
+
+# Mask Sensitive Information in Logs.
 mask_sensitive_data() {
     local data="$1"
     # Skip masking if mask_sensitive is 0
@@ -161,6 +180,47 @@ mask_sensitive_data() {
         s/(Found sessionID:[ ]*)[^ ]*/\1*****/g;
     '
 }
+
+# Check Log Size & Rotate If Needed 
+check_log_size() {
+    local log_size_limit=${log_size_limit:-5}
+    local max_old_logs=${max_old_logs:-5}
+
+    if [ -f "$log_file" ]; then
+        local log_size_kb
+        log_size_kb=$(du -k "$log_file" | cut -f1)
+
+        if (( log_size_kb / 1024 >= log_size_limit )); then
+            rotate_log
+        fi
+    fi
+
+    cleanup_old_logs "$log_file" "$max_old_logs"
+}
+
+# Rotate Logs When Required
+rotate_log() {
+    local timestamp
+    timestamp=$(date +"%Y%m%d%H%M%S")
+    mv "$log_file" "${log_file}.${timestamp}"
+    log_message "INFO" "Log file rotated at $(date +"%Y-%m-%d %H:%M:%S")" "if_verbose"
+    log_message "INFO" "Log file rotated. Previous log saved as ${log_file}.${timestamp}." "if_verbose"
+}
+
+# Cleanup Old Logs When Required
+cleanup_old_logs() {
+    local log_file_base="$1"
+    local retention_count="$2"
+
+    ls -1t "${log_file_base}."* 2>/dev/null | tail -n +$((retention_count + 1)) | while read -r old_log; do
+        rm -f "$old_log"
+        log_message "INFO" "Deleted old log file: $old_log" "if_verbose"
+    done
+}
+
+################################################################################
+#                              COMMAND LINE OPTIONS
+################################################################################
 
 # =======================================
 # Display Usage Instructions
@@ -250,18 +310,19 @@ while getopts ":vhuI:F:" opt; do
   esac
 done
 
+################################################################################
+#                    LOAD ENVIRONMENT & VALIDATE CONFIGURATION
+################################################################################
+
 # =======================================
-# Load Environment Variables
+# Load Environment Variables From .env
 # =======================================
-script_name=$(basename "$0")  #
 load_env() {
     if [ -f "$env_file" ]; then
         source "$env_file"
 
         # .env file loaded, log script version for reference in troubleshooting
-        script_name=$(basename "$0")  #
         log_message "START" "Running $(basename "$0") v${SCRIPT_VERSION}..." "always"
-
         log_message "ENV" "Environment file '$env_file' loaded." "if_verbose"
 
         # Ensure getopts overrides the .env file for mask_sensitive
@@ -272,72 +333,103 @@ load_env() {
 }
 
 # =======================================
-# Check Required Dependencies
+# If .env changed, validate Pi-hole Configurations
 # =======================================
-check_dependencies() {
-    local missing_deps=()
-    if ! command -v jq &> /dev/null; then
-        missing_deps+=("'jq'")
-    fi
-    if ! command -v curl &> /dev/null; then
-        missing_deps+=("'curl'")
-    fi
+ENV_CHECKSUM_FILE="${env_file}.sha256"
 
-    # Attempt to auto-install if missing. Then re-check. Debian, Fedora, macOS only.
-    if [ ${#missing_deps[@]} -ne 0 ]; then
-        log_message "INFO" "Detected missing dependencies: ${missing_deps[*]}."
+check_env_changes() {
+  # If .env does not exist, just skip
+  if [[ ! -f "$env_file" ]]; then
+    return
+  fi
 
-        # Convert array to space-separated string (strip quotes)
-        local to_install=""
-        for dep in "${missing_deps[@]}"; do
-            to_install+=" ${dep//\'/}"
-        done
+  local current_hash
+  current_hash="$(compute_env_checksum)"
+  if [[ -z "$current_hash" ]]; then
+    return
+  fi
 
-        log_message "INFO" "Attempting to install missing dependencies on Debian-based, Fedora-based, or macOS..."
+  if [[ -f "$ENV_CHECKSUM_FILE" ]]; then
+    local old_hash
+    old_hash="$(cat "$ENV_CHECKSUM_FILE" 2>/dev/null || true)"
 
-        if command -v apt-get >/dev/null 2>&1; then
-            # Debian-based
-            log_message "INFO" "Using apt-get to install $to_install..."
-            sudo apt-get update -y && sudo apt-get install -y $to_install || true
-        elif command -v dnf >/dev/null 2>&1; then
-            # Fedora-based
-            log_message "INFO" "Using dnf to install $to_install..."
-            sudo dnf install -y $to_install || true
-        elif [[ "$(uname)" == "Darwin" ]]; then
-            # macOS
-            log_message "INFO" "Using Homebrew to install $to_install..."
-            brew install $to_install || true
-        else
-            log_message "WARN" "No recognized package manager found. Please install dependencies manually."
-        fi
+    if [[ "$current_hash" != "$old_hash" ]]; then
+      log_message "ENV" "Detected changes in $env_file. Validating Pi-hole configurations..." "always"
+      validate_and_update_checksum
+    else
+      log_message "ENV" "No changes in $env_file since last run. Skipping Pi-hole configuration tests." "if_verbose"
     fi
-
-    # Re-check if dependencies are still missing
-    local still_missing=()
-    if ! command -v jq &> /dev/null; then
-        still_missing+=("'jq'")
-    fi
-    if ! command -v curl &> /dev/null; then
-        still_missing+=("'curl'")
-    fi
-
-    if [ ${#still_missing[@]} -ne 0 ]; then
-        handle_error "Missing dependencies after attempted install: ${still_missing[*]}. Please install them to run this script."
-    fi
+  else
+    log_message "ENV" "No previous checksum found for $env_file. Validating Pi-hole configurations..." "always"
+    validate_and_update_checksum
+  fi
 }
 
-# =======================================
-# SSL Verification Check
-# =======================================
-ssl_verification() {
-    if [ "${verify_ssl:-0}" -eq 0 ]; then
-        log_message "ENV" "SSL verification is disabled (verify_ssl=0) in .env." "if_verbose"
-    fi
+compute_env_checksum() {
+  sha256sum "$env_file" 2>/dev/null | awk '{print $1}'
 }
 
-# =======================================
+validate_and_update_checksum() {
+  remove_session_files                              # Remove any existing session files to avoid mismatches
+  validate_piholes                                  # Validate Configuration via Test Authorization 
+  echo "$current_hash" > "$ENV_CHECKSUM_FILE"       # Save the new checksum
+}
+
+remove_session_files() {
+  log_message "ENV" "Removing any existing session files..." "always"
+  rm -f "$temp_files_path/primary-session.json" "$temp_files_path/secondary-session_"*.json 2>/dev/null || true
+} 
+
+# Validate Pi-hole Configuations by Attempting to Authenticate Each Instance 
+validate_piholes() {
+  # Validate Primary
+  log_message "ENV" "Testing configuration for PRIMARY: $primary_name at $primary_url" "always"
+  test_pihole_auth "$primary_name" "$primary_pass" "$primary_url"
+
+  # Validate each Secondary
+  for i in "${!secondary_names[@]}"; do
+    local s_name="${secondary_names[$i]}"
+    local s_url="${secondary_urls[$i]}"
+    local s_pass="${secondary_passes[$i]}"
+
+    log_message "ENV" "Testing configurations for SECONDARY: $s_name at $s_url" "always"
+    test_pihole_auth "$s_name" "$s_pass" "$s_url"
+  done
+
+  log_message "ENV" "Pi-hole configurations validated for all instances." "always"
+}
+
+test_pihole_auth() {
+  local name="$1"
+  local pass="$2"
+  local url="$3"
+
+  # Test for Valid Authentication Response
+  local response
+  response="$(curl -s -k -S -X POST "$url/api/auth" \
+    -H "Content-Type: application/json" \
+    --data "{\"password\":\"$pass\"}" 2>/dev/null || true)"
+
+  if [[ -z "$response" ]]; then
+    handle_error "No response from $name at $url. Possibly wrong URL or Pi-hole not reachable."
+  fi
+
+  # Check if response is valid JSON
+  if ! echo "$response" | jq . >/dev/null 2>&1; then
+    handle_error "Response from $name is not valid JSON. Possibly a 404 or old Pi-hole version. ($url)"
+  fi
+
+  # Check if we see "valid":true
+  if ! echo "$response" | grep -q '"valid":true'; then
+    handle_error "Validation failed for $name. $(mask_sensitive_data "$response")"
+  fi
+
+  log_message "ENV" "$name authenticated successfully." "always"
+}
+
+# ========================================
 # Validate Environment Variables and Paths
-# =======================================
+# ========================================
 validate_env() {
     temp_files_path="${temp_files_path:-$default_temp_files_path}"
     log_file="${log_file:-$default_log_file}"
@@ -406,132 +498,72 @@ validate_env() {
 }
 
 # =======================================
-# Logging Size Limit & Rotation
+# SSL Verification Check
 # =======================================
-check_log_size() {
-    local log_size_limit=${log_size_limit:-5}
-    local max_old_logs=${max_old_logs:-5}
+ssl_verification() {
+    if [ "${verify_ssl:-0}" -eq 0 ]; then
+        log_message "ENV" "SSL verification is disabled (verify_ssl=0) in .env." "if_verbose"
+    fi
+}
 
-    if [ -f "$log_file" ]; then
-        local log_size_kb
-        log_size_kb=$(du -k "$log_file" | cut -f1)
-
-        if (( log_size_kb / 1024 >= log_size_limit )); then
-            rotate_log
-        fi
+# =======================================
+# Check Required Dependencies
+# =======================================
+check_dependencies() {
+    local missing_deps=()
+    if ! command -v jq &> /dev/null; then
+        missing_deps+=("'jq'")
+    fi
+    if ! command -v curl &> /dev/null; then
+        missing_deps+=("'curl'")
     fi
 
-    cleanup_old_logs "$log_file" "$max_old_logs"
-}
+    # Attempt to auto-install if missing. Then re-check. Debian, Fedora, macOS only.
+    if [ ${#missing_deps[@]} -ne 0 ]; then
+        log_message "INFO" "Detected missing dependencies: ${missing_deps[*]}."
 
-# =======================================
-# Rotate Log File
-# =======================================
-rotate_log() {
-    local timestamp
-    timestamp=$(date +"%Y%m%d%H%M%S")
-    mv "$log_file" "${log_file}.${timestamp}"
-    log_message "INFO" "Log file rotated at $(date +"%Y-%m-%d %H:%M:%S")" "if_verbose"
-    log_message "INFO" "Log file rotated. Previous log saved as ${log_file}.${timestamp}." "if_verbose"
-}
+        # Convert array to space-separated string (strip quotes)
+        local to_install=""
+        for dep in "${missing_deps[@]}"; do
+            to_install+=" ${dep//\'/}"
+        done
 
-# =======================================
-# Cleanup Old Logs
-# =======================================
-cleanup_old_logs() {
-    local log_file_base="$1"
-    local retention_count="$2"
+        log_message "INFO" "Attempting to install missing dependencies on Debian-based, Fedora-based, or macOS..."
 
-    ls -1t "${log_file_base}."* 2>/dev/null | tail -n +$((retention_count + 1)) | while read -r old_log; do
-        rm -f "$old_log"
-        log_message "INFO" "Deleted old log file: $old_log" "if_verbose"
-    done
-}
-
-################################################################################
-#                            ERROR & CLEANUP
-################################################################################
-
-# =======================================
-# Handle Errors
-# =======================================
-handle_error() {
-    local message="$1"
-    verbose=1
-
-    if [ -s "$curl_error_log" ]; then
-        log_message "ERROR" "$(cat "$curl_error_log")" "always" "red"
-        rm -f "$curl_error_log"
-    else
-        log_message "ERROR" "$message" "always" "red"
-    fi
-
-    exit 1
-}
-
-# =======================================
-# Remove File Safely
-# =======================================
-remove_file() {
-    local file_path="$1"
-    local description="$2"
-
-    if [ -f "$file_path" ]; then
-        if rm -f "$file_path"; then
-            log_message "CLEANUP" "Deleted $description: $file_path" "if_verbose"
+        if command -v apt-get >/dev/null 2>&1; then
+            # Debian-based
+            log_message "INFO" "Using apt-get to install $to_install..."
+            sudo apt-get update -y && sudo apt-get install -y $to_install || true
+        elif command -v dnf >/dev/null 2>&1; then
+            # Fedora-based
+            log_message "INFO" "Using dnf to install $to_install..."
+            sudo dnf install -y $to_install || true
+        elif [[ "$(uname)" == "Darwin" ]]; then
+            # macOS
+            log_message "INFO" "Using Homebrew to install $to_install..."
+            brew install $to_install || true
         else
-            log_message "ERROR":" Failed to delete $description: $file_path." "always"
-            return 1
+            log_message "WARN" "No recognized package manager found. Please install dependencies manually."
         fi
     fi
-    return 0
-}
 
-# =======================================
-# Remove Session Files 
-# Called when .env has changed
-# =======================================
-remove_session_files() {
-  log_message "ENV" "Removing any existing session files..." "always"
-  rm -f "$temp_files_path/primary-session.json" "$temp_files_path/secondary-session_"*.json 2>/dev/null || true
-}
-
-# =======================================
-# Cleanup Temporary Files on Exit Function
-# =======================================
-cleanup() {
-    local exit_code=$?
-
-    log_message "CLEANUP" "Beginning cleanup..." "if_verbose"
-
-    local cleanup_failed=0
-
-    remove_file "$teleporter_file" "temporary backup file" || cleanup_failed=1
-    remove_file "$curl_error_log" "curl error log" || cleanup_failed=1
-    remove_file "$auth_response_file" "authentication response file" || cleanup_failed=1
-
-    if [ $cleanup_failed -ne 0 ]; then
-        exit_code=1
+    # Re-check if dependencies are still missing
+    local still_missing=()
+    if ! command -v jq &> /dev/null; then
+        still_missing+=("'jq'")
+    fi
+    if ! command -v curl &> /dev/null; then
+        still_missing+=("'curl'")
     fi
 
-    if [ $exit_code -ne 0 ]; then
-        log_message "INFO" "Exiting ($exit_code)." "always"
-    else
-        log_message "INFO" "Done." "if_verbose"
+    if [ ${#still_missing[@]} -ne 0 ]; then
+        handle_error "Missing dependencies after attempted install: ${still_missing[*]}. Please install them to run this script."
     fi
-
-    exit "$exit_code"
 }
 
-trap 'cleanup' EXIT
-
 ################################################################################
-#                              RUN_CURL
+#                               RUN_CURL
 ################################################################################
-
-# =======================================
-# Run Curl Commands (except Upload)
-# =======================================
 run_curl() {
     local method="$1"
     local url="$2"
@@ -696,6 +728,29 @@ authenticate() {
 ################################################################################
 
 # =======================================
+# Download Teleporter File
+# =======================================
+download_teleporter_file() {
+    local headers="-H Accept:application/zip"
+
+    if [ -n "$primary_sid" ]; then
+        headers="$headers -H sid:$primary_sid"
+    else
+        log_message "DOWNLOAD" "No sessionID provided for $primary_name; proceeding without authentication." "if_verbose"
+    fi
+
+    log_message "DOWNLOAD" "Downloading Teleporter settings from $primary_name." "if_verbose"
+    run_curl "GET" "$primary_url/api/teleporter" "$headers" "" "$teleporter_file"
+
+    if [ ! -f "$teleporter_file" ] || ! file "$teleporter_file" | grep -q "Zip archive data"; then
+        handle_error "Failed to download or validate Teleporter file from $primary_name."
+        return
+    fi
+
+    log_message "DOWNLOAD" "Teleporter file downloaded from $primary_name." "always"
+}
+
+# =======================================
 # Generate Import JSON
 # =======================================
 generate_import_json() {
@@ -722,32 +777,9 @@ generate_import_json() {
   echo "$final_import_json"
 }
 
-# =======================================
-# Download Teleporter File
-# =======================================
-download_teleporter_file() {
-    local headers="-H Accept:application/zip"
-
-    if [ -n "$primary_sid" ]; then
-        headers="$headers -H sid:$primary_sid"
-    else
-        log_message "DOWNLOAD" "No sessionID provided for $primary_name; proceeding without authentication." "if_verbose"
-    fi
-
-    log_message "DOWNLOAD" "Downloading Teleporter settings from $primary_name." "if_verbose"
-    run_curl "GET" "$primary_url/api/teleporter" "$headers" "" "$teleporter_file"
-
-    if [ ! -f "$teleporter_file" ] || ! file "$teleporter_file" | grep -q "Zip archive data"; then
-        handle_error "Failed to download or validate Teleporter file from $primary_name."
-        return
-    fi
-
-    log_message "DOWNLOAD" "Teleporter file downloaded from $primary_name." "always"
-}
-
-# =======================================
+# =============================================
 # Upload Teleporter File to a Secondary Pi-hole
-# =======================================
+# =============================================
 upload_teleporter_file() {
     local pi_name="$1"
     local pi_url="$2"
@@ -784,102 +816,63 @@ upload_teleporter_file() {
 }
 
 ################################################################################
-#Remove Existing Session Files & Revalidate Pi-holes if .env changes (Checksums)
+#                            CLEANUP 
 ################################################################################
 
-ENV_CHECKSUM_FILE="${env_file}.sha256"
+# =======================================
+# Cleanup Temporary Files on Exit 
+# =======================================
+cleanup() {
+    local exit_code=$?
+    local cleanup_failed=0
+    
+    log_message "CLEANUP" "Beginning cleanup..." "if_verbose"
+    remove_file "$teleporter_file" "temporary backup file" || cleanup_failed=1
+    remove_file "$curl_error_log" "curl error log" || cleanup_failed=1
+    remove_file "$auth_response_file" "authentication response file" || cleanup_failed=1
 
-compute_env_checksum() {
-  sha256sum "$env_file" 2>/dev/null | awk '{print $1}'
-}
-
-test_pihole_auth() {
-  local name="$1"
-  local pass="$2"
-  local url="$3"
-
-  # Minimal "auth" check
-  local response
-  response="$(curl -s -k -S -X POST "$url/api/auth" \
-    -H "Content-Type: application/json" \
-    --data "{\"password\":\"$pass\"}" 2>/dev/null || true)"
-
-  if [[ -z "$response" ]]; then
-    handle_error "No response from $name at $url. Possibly wrong URL or Pi-hole not reachable."
-  fi
-
-  # Check if response is valid JSON
-  if ! echo "$response" | jq . >/dev/null 2>&1; then
-    handle_error "Response from $name is not valid JSON. Possibly a 404 or old Pi-hole version. ($url)"
-  fi
-
-  # Check if we see "valid":true
-  if ! echo "$response" | grep -q '"valid":true'; then
-    handle_error "Validation failed for $name. $(mask_sensitive_data "$response")"
-  fi
-
-  log_message "ENV" "$name validated successfully via test auth." "always"
-}
-
-validate_piholes_after_env_changes() {
-  # 1) Validate Primary
-  log_message "ENV" "Testing connectivity for PRIMARY: $primary_name at $primary_url" "always"
-  test_pihole_auth "$primary_name" "$primary_pass" "$primary_url"
-
-  # 2) Validate each Secondary
-  for i in "${!secondary_names[@]}"; do
-    local s_name="${secondary_names[$i]}"
-    local s_url="${secondary_urls[$i]}"
-    local s_pass="${secondary_passes[$i]}"
-
-    log_message "ENV" "Testing connectivity for SECONDARY: $s_name at $s_url" "always"
-    test_pihole_auth "$s_name" "$s_pass" "$s_url"
-  done
-
-  log_message "ENV" "Extended Pi-hole validation passed for all instances." "always"
-}
-
-check_env_changes() {
-  # If .env does not exist, just skip
-  if [[ ! -f "$env_file" ]]; then
-    return
-  fi
-
-  local current_hash
-  current_hash="$(compute_env_checksum)"
-  if [[ -z "$current_hash" ]]; then
-    return
-  fi
-
-  if [[ -f "$ENV_CHECKSUM_FILE" ]]; then
-    local old_hash
-    old_hash="$(cat "$ENV_CHECKSUM_FILE" 2>/dev/null || true)"
-
-    if [[ "$current_hash" != "$old_hash" ]]; then
-      log_message "ENV" "Detected changes in $env_file. Running extended Pi-hole validation..." "always"
-      remove_session_files                          # Remove old session files to avoid mismatches
-      validate_piholes_after_env_changes            # Do an extended test-auth validation    
-      echo "$current_hash" > "$ENV_CHECKSUM_FILE"   # Save the new checksum
-    else
-      log_message "ENV" "No changes in $env_file since last run. Skipping extended Pi-hole validation." "if_verbose"
+    if [ $cleanup_failed -ne 0 ]; then
+        exit_code=1
     fi
-  else
-    log_message "ENV" "No previous checksum found for $env_file. Running extended Pi-hole validation..." "always"
-    remove_session_files                          # Remove old session files to avoid mismatches
-    validate_piholes_after_env_changes            # Do an extended test-auth validation    
-    echo "$current_hash" > "$ENV_CHECKSUM_FILE"   # Save the new checksum
-  fi
+
+    if [ $exit_code -ne 0 ]; then
+        log_message "INFO" "Exiting ($exit_code)." "always"
+    else
+        log_message "INFO" "Done." "if_verbose"
+    fi
+
+    exit "$exit_code"
 }
+
+# =======================================
+# Remove File Safely
+# =======================================
+remove_file() {
+    local file_path="$1"
+    local description="$2"
+
+    if [ -f "$file_path" ]; then
+        if rm -f "$file_path"; then
+            log_message "CLEANUP" "Deleted $description: $file_path" "if_verbose"
+        else
+            log_message "ERROR":" Failed to delete $description: $file_path." "always"
+            return 1
+        fi
+    fi
+    return 0
+}
+
+trap 'cleanup' EXIT
 
 ################################################################################
 #                          MAIN SCRIPT EXECUTION FLOW
 ################################################################################
 
-load_env           # 1) Load environment variables from .env file
-check_env_changes  # 2) If .env changed, do extended Pi-hole connectivity checks
-validate_env       # 3) Validate environment variables and paths
-check_dependencies # 4) Ensure required commands are available
-ssl_verification   # 5) Log SSL verification status
+load_env             # Load environment variables from .env file
+check_env_changes    # If .env changed, validate Pi-hole Configurations
+validate_env         # Basic environment checks (paths, arrays, etc.)
+check_dependencies   # Make sure jq, curl, etc. are installed
+ssl_verification     # Log SSL verification status
 
 # Apply Import Settings Overrides AFTER loading .env
 if [ -n "$import_settings_file" ]; then
