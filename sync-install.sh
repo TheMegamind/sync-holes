@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-SCRIPT_VERSION="0.9.7.4"
+SCRIPT_VERSION="0.9.7.3"
 #
 # ===============================================================================
 #                            sync-install.sh
@@ -41,7 +41,6 @@ SCRIPT_VERSION="0.9.7.4"
 #   03-16-2025      0.9.7.1  Revise check for newer install script
 #   03-17-2025      0.9.7.2  Add Retry Options+ when Pi-hole config fails validation
 #   03-17-2025      0.9.7.3  Clarify port suggestion for https//
-#   03-23-2025      0.9.7.4  Add betterguidance on default protocol/port pairings
 #
 # Usage:
 #   ./sync-install.sh [options]
@@ -61,7 +60,7 @@ SCRIPT_VERSION="0.9.7.4"
 set -e
 
 #==============================================================================
-# Color Codes
+# Color Variables
 #==============================================================================
 YELLOW="\033[1;33m"
 GREEN="\033[1;32m"
@@ -83,7 +82,7 @@ ADVANCED=0
 CRON_DEFAULT_SCHEDULE="0 3 * * *"  # e.g., run daily at 3:00 AM
 
 #==============================================================================
-# Usage Instructions
+# Helper: Print usage
 #==============================================================================
 usage() {
   cat <<EOF
@@ -384,10 +383,7 @@ read -r config_choice
 
 configure_piholes() {
   info "Note: Pi-hole #1 is the PRIMARY/SOURCE. All others are SECONDARY/TARGETS."
-  # Provide a short reminder about typical ports:
-  info "Reminder: For http, the default port is 80 (or sometimes 8080); for https, it's 443."
-  info "Example: https://192.168.1.10:443 or http://192.168.1.10:80"
-  info "If you changed the Pi-hole webserver.port in advanced settings, use that port."
+  info "For https://, Pi-hole typically uses port 443 for its REST API unless changed."
 
   # DELETE existing session files to avoid mismatches
   info "Removing any existing session files to avoid stale or mismatched sessions..."
@@ -437,6 +433,7 @@ configure_piholes() {
       # Check if validation succeeded
       if [[ -n "$response" ]] && echo "$response" | grep -q '"valid":true'; then
         info "Validation successful for $friendly!"
+        # Immediately store data and break from loop
         done_configuring=1
       else
         # Validation failed
@@ -471,6 +468,7 @@ configure_piholes() {
             read -r confirm_s
             if [[ "$confirm_s" =~ ^[Yy]$ ]]; then
               warn "Skipping configuration for Pi-hole #$i. This Pi-hole won't be added to .env."
+              # We'll set 'friendly' etc. to blank
               friendly=""
               pihole_url=""
               pihole_pass=""
@@ -494,6 +492,7 @@ configure_piholes() {
 
     # If the user ended up skipping this Pi-hole, 'friendly' will be blank.
     if [[ -n "$friendly" && -n "$pihole_url" ]]; then
+      # If it's the first Pi-hole and not done yet, it’s primary
       if (( i == 1 && primary_done == 0 )); then
         run_cmd "sudo sed -i 's|^primary_name=.*|primary_name=\"$friendly\"|' \"$ENV_PATH\" || true"
         run_cmd "sudo sed -i 's|^primary_url=.*|primary_url=\"$pihole_url\"|' \"$ENV_PATH\" || true"
@@ -505,72 +504,10 @@ configure_piholes() {
         second_passes+=("$pihole_pass")
       fi
     else
+      # User explicitly skipped
       warn "Pi-hole #$i was skipped. No data recorded in .env."
     fi
   done
-
-  # ---------------------------------------------------------------------------
-  # Insert Secondary Arrays Below:
-  #   "# ** DO NOT REMOVE OR MODIFY THIS LINE — INSTALL SCRIPT INSERTS DATA BELOW **"
-  # but only if pi_count > 1
-  # ---------------------------------------------------------------------------
-  if (( pi_count > 1 )); then
-    local names_str="secondary_names=("
-    local urls_str="secondary_urls=("
-    local passes_str="secondary_passes=("
-
-    for (( j=0; j<${#second_names[@]}; j++ )); do
-      # Original user input
-      local raw_name="${second_names[$j]}"
-      local raw_url="${second_urls[$j]}"
-      local raw_pass="${second_passes[$j]}"
-
-      # Only escape double quotes so .env remains valid shell syntax
-      raw_name="${raw_name//\"/\\\"}"
-      raw_url="${raw_url//\"/\\\"}"
-      raw_pass="${raw_pass//\"/\\\"}"
-
-      names_str+="\"$raw_name\" "
-      urls_str+="\"$raw_url\" "
-      passes_str+="\"$raw_pass\" "
-    done
-
-    names_str+=")"
-    urls_str+=")"
-    passes_str+=")"
-
-    # Remove any old secondary_ lines from .env
-    run_cmd "sudo sed -i '/^secondary_names=/d' \"$ENV_PATH\""
-    run_cmd "sudo sed -i '/^secondary_urls=/d' \"$ENV_PATH\""
-    run_cmd "sudo sed -i '/^secondary_passes=/d' \"$ENV_PATH\""
-
-    # Build a temporary file with new lines
-    local temp_file
-    temp_file="$(mktemp)"
-    echo "$names_str"  >> "$temp_file"
-    echo "$urls_str"   >> "$temp_file"
-    echo "$passes_str" >> "$temp_file"
-
-    # Insert them right after:
-    # ** DO NOT REMOVE OR MODIFY THIS LINE — INSTALL SCRIPT INSERTS DATA BELOW **
-    run_cmd "sudo sed -i '/^# \\*\\* DO NOT REMOVE OR MODIFY THIS LINE - INSTALL SCRIPT INSERTS DATA BELOW/r $temp_file' \"$ENV_PATH\""
-
-    rm -f "$temp_file"
-  fi
-
-  info "Done configuring Pi-holes!"
-}  # <-- The function ends here with one closing brace
-
-# Decide whether to call configure_piholes() based on user input
-if [[ "$config_choice" =~ ^[Yy]$ ]]; then
-  if [[ $SIMULATE -eq 1 ]]; then
-    info "[SIMULATE] Would configure Pi-holes by prompting user..."
-  else
-    configure_piholes
-  fi
-else
-  info "Skipping Pi-hole configuration. Any existing Pi-hole settings in $ENV_PATH will remain unchanged."
-fi
 
 # ---------------------------------------------------------------------------
 # Insert Secondary Arrays Below:
