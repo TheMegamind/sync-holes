@@ -4,8 +4,6 @@ SCRIPT_VERSION="0.9.7.2"
 # ===============================================================================
 #                            sync-holes.sh
 #         Synchronize Primary Pi-hole to Multiple Secondary Pi-holes
-#
-#       ** Back-up Teleporter settings BEFORE testing this script!! **
 # ===============================================================================
 #
 # MIT License
@@ -46,7 +44,7 @@ SCRIPT_VERSION="0.9.7.2"
 #   03-15-2025    0.9.6.3  Add validation of Pi-hole Configuration changes
 #   03-15-2025    0.9.7    Bump Version # for newest release
 #   03-17-2025    0.9.7.1  Remove Session Files when Configuration changes
-#   03-21-2025    0.9.7.2  Clean-Up & Reorganize Code
+#   03-21-2025    0.9.7.2  Structural Refactoring. +Validate CLI Import JSON
 #
 # ===============================================================================
 #
@@ -70,17 +68,17 @@ declare -Ar COLORS=(
 # preferred directory created by the install script.
 declare -r env_file="/usr/local/etc/sync-holes.env"
 
+# The following defaults will be applied for any values not declared in the .env
 declare -r default_log_file="/var/log/sync-holes.log"
 declare -r default_temp_files_path="/tmp"
-
 declare -r default_log_size_limit=1   # Default log file size limit in MB
 declare -r default_max_old_logs=1     # Default max number of old log files to retain
 declare -r default_verify_ssl=0       # Default to SSL verification disabled
 declare -r default_mask_sensitive=1   # Default masking for sensitive data
 
-declare -r default_import_settings_json="{}"  # Default import settings JSON placeholder
 declare -r default_curl_error_log="$default_temp_files_path/curl_error_log.log"
 declare -r auth_response_file="$default_temp_files_path/auth_response.json"
+declare -r default_import_settings_json="{}"  # Default import settings JSON placeholder
 
 ################################################################################
 #                          LOGGING & ERROR HANDLING
@@ -108,7 +106,7 @@ log_message() {
     local timestamp
     timestamp=$(date +"%Y-%m-%d %H:%M:%S")
 
-    # Try to append the message to the log file silently
+    # Append the message to the log file silently
     if [[ -n "$log_file" ]] && [[ -w "$(dirname "$log_file")" ]]; then
         echo "$timestamp [$tag] $message" >> "$log_file" 2>/dev/null
     fi
@@ -198,7 +196,7 @@ check_log_size() {
     cleanup_old_logs "$log_file" "$max_old_logs"
 }
 
-# Rotate Logs When Required
+# Rotate Logs 
 rotate_log() {
     local timestamp
     timestamp=$(date +"%Y%m%d%H%M%S")
@@ -207,7 +205,7 @@ rotate_log() {
     log_message "INFO" "Log file rotated. Previous log saved as ${log_file}.${timestamp}." "if_verbose"
 }
 
-# Cleanup Old Logs When Required
+# Cleanup Old Logs 
 cleanup_old_logs() {
     local log_file_base="$1"
     local retention_count="$2"
@@ -333,6 +331,25 @@ load_env() {
 }
 
 # =======================================
+# Apply CLI Import Settings Overrides
+# =======================================
+import_settings_overrides() {
+    if [ -n "$import_settings_file" ]; then
+      if [ -f "$import_settings_file" ]; then
+        override_import_settings=$(cat "$import_settings_file")
+      else
+        log_message "ERROR" "Import settings file '$import_settings_file' not found." "always" "red"
+        exit 1
+      fi
+    fi
+
+    # Check for valid json
+    if ! echo "$override_import_settings" | jq . >/dev/null 2>&1; then
+        handle_error "The inline JSON is invalid. Please check your syntax."
+    fi
+}
+
+# =======================================
 # If .env changed, validate Pi-hole Configurations
 # =======================================
 ENV_CHECKSUM_FILE="${env_file}.sha256"
@@ -365,6 +382,10 @@ check_env_changes() {
   fi
 }
 
+# =======================================
+# Env & Validation Helper Functions
+# =======================================
+
 compute_env_checksum() {
   sha256sum "$env_file" 2>/dev/null | awk '{print $1}'
 }
@@ -375,6 +396,7 @@ validate_and_update_checksum() {
   echo "$current_hash" > "$ENV_CHECKSUM_FILE"       # Save the new checksum
 }
 
+# Removes Existing Session Files to prevent mismatches with new or modified configurations
 remove_session_files() {
   log_message "ENV" "Removing any existing session files..." "always"
   rm -f "$temp_files_path/primary-session.json" "$temp_files_path/secondary-session_"*.json 2>/dev/null || true
@@ -399,6 +421,7 @@ validate_piholes() {
   log_message "ENV" "Pi-hole configurations validated for all instances." "always"
 }
 
+# Try to Authenticate Pi-hole with defined configurations
 test_pihole_auth() {
   local name="$1"
   local pass="$2"
@@ -427,9 +450,9 @@ test_pihole_auth() {
   log_message "ENV" "$name authenticated successfully." "always"
 }
 
-# ========================================
+# =======================================
 # Validate Environment Variables and Paths
-# ========================================
+# =======================================
 validate_env() {
     temp_files_path="${temp_files_path:-$default_temp_files_path}"
     log_file="${log_file:-$default_log_file}"
@@ -469,6 +492,7 @@ validate_env() {
         handle_error "Log file directory '$log_dir' does not exist or is not writable. Please run with sudo or fix permissions."
     fi
 
+    # Check for Required Variables
     for var in "${required_vars[@]}"; do
         if [ -z "${!var}" ]; then
             missing_vars+=("$var")
@@ -481,6 +505,7 @@ validate_env() {
         handle_error "The arrays secondary_names, secondary_urls, and secondary_passes must have the same number of elements."
     fi
 
+    # Check for proper url syntax
     local url_regex='^(https?://)([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|([0-9]{1,3}\.){3}[0-9]{1,3})(:[0-9]{1,5})?$'
     if [[ ! "$primary_url" =~ $url_regex ]]; then
         invalid_urls+=("primary_url")
@@ -736,6 +761,7 @@ download_teleporter_file() {
     if [ -n "$primary_sid" ]; then
         headers="$headers -H sid:$primary_sid"
     else
+        # No auth (sid) required with passwordless Pi-hole
         log_message "DOWNLOAD" "No sessionID provided for $primary_name; proceeding without authentication." "if_verbose"
     fi
 
@@ -748,33 +774,6 @@ download_teleporter_file() {
     fi
 
     log_message "DOWNLOAD" "Teleporter file downloaded from $primary_name." "always"
-}
-
-# =======================================
-# Generate Import JSON
-# =======================================
-generate_import_json() {
-  default_import_json=$(jq -n \
-    --argjson config "$import_config" \
-    --argjson dhcp_leases "$import_dhcp_leases" \
-    --argjson gravity_group "$import_gravity_group" \
-    --argjson gravity_adlist "$import_gravity_adlist" \
-    --argjson gravity_adlist_by_group "$import_gravity_adlist_by_group" \
-    --argjson gravity_domainlist "$import_gravity_domainlist" \
-    --argjson gravity_domainlist_by_group "$import_gravity_domainlist_by_group" \
-    --argjson gravity_client "$import_gravity_client" \
-    --argjson gravity_client_by_group "$import_gravity_client_by_group" \
-    '{config: $config, dhcp_leases: $dhcp_leases, gravity: {group: $gravity_group, adlist: $gravity_adlist, adlist_by_group: $gravity_adlist_by_group, domainlist: $gravity_domainlist, domainlist_by_group: $gravity_domainlist_by_group, client: $gravity_client, client_by_group: $gravity_client_by_group}}'
-  )
-
-  if [ -n "$override_import_settings" ]; then
-    clean_override=$(echo "$override_import_settings" | jq 'with_entries(select(.value != null))')
-    final_import_json=$(echo "$default_import_json" "$clean_override" | jq -s '.[0] * .[1] | del(..|select(. == null))')
-  else
-    final_import_json="$default_import_json"
-  fi
-
-  echo "$final_import_json"
 }
 
 # =============================================
@@ -813,6 +812,34 @@ upload_teleporter_file() {
 
     log_message "UPLOAD" "Teleporter file uploaded to $pi_name." "always"
     log_message "INFO" "$primary_name and $pi_name settings synchronized!" "always" "green"
+}
+
+
+# =======================================
+# Generate Import JSON
+# =======================================
+generate_import_json() {
+  default_import_json=$(jq -n \
+    --argjson config "$import_config" \
+    --argjson dhcp_leases "$import_dhcp_leases" \
+    --argjson gravity_group "$import_gravity_group" \
+    --argjson gravity_adlist "$import_gravity_adlist" \
+    --argjson gravity_adlist_by_group "$import_gravity_adlist_by_group" \
+    --argjson gravity_domainlist "$import_gravity_domainlist" \
+    --argjson gravity_domainlist_by_group "$import_gravity_domainlist_by_group" \
+    --argjson gravity_client "$import_gravity_client" \
+    --argjson gravity_client_by_group "$import_gravity_client_by_group" \
+    '{config: $config, dhcp_leases: $dhcp_leases, gravity: {group: $gravity_group, adlist: $gravity_adlist, adlist_by_group: $gravity_adlist_by_group, domainlist: $gravity_domainlist, domainlist_by_group: $gravity_domainlist_by_group, client: $gravity_client, client_by_group: $gravity_client_by_group}}'
+  )
+
+  if [ -n "$override_import_settings" ]; then
+    clean_override=$(echo "$override_import_settings" | jq 'with_entries(select(.value != null))')
+    final_import_json=$(echo "$default_import_json" "$clean_override" | jq -s '.[0] * .[1] | del(..|select(. == null))')
+  else
+    final_import_json="$default_import_json"
+  fi
+
+  echo "$final_import_json"
 }
 
 ################################################################################
@@ -865,24 +892,15 @@ remove_file() {
 trap 'cleanup' EXIT
 
 ################################################################################
-#                          MAIN SCRIPT EXECUTION FLOW
+#                           MAIN EXECUTION FLOW
 ################################################################################
 
-load_env             # Load environment variables from .env file
-check_env_changes    # If .env changed, validate Pi-hole Configurations
-validate_env         # Basic environment checks (paths, arrays, etc.)
-check_dependencies   # Make sure jq, curl, etc. are installed
-ssl_verification     # Log SSL verification status
-
-# Apply Import Settings Overrides AFTER loading .env
-if [ -n "$import_settings_file" ]; then
-  if [ -f "$import_settings_file" ]; then
-    override_import_settings=$(cat "$import_settings_file")
-  else
-    log_message "ERROR" "Import settings file '$import_settings_file' not found." "always" "red"
-    exit 1
-  fi
-fi
+load_env                   # Load environment variables from .env file
+import_settings_overrides  # Apply CLI Import Settings Overrides (if present)
+check_env_changes          # If .env changed, validate Pi-hole Configurations
+validate_env               # Basic environment checks (paths, arrays, etc.)
+check_dependencies         # Make sure jq, curl, etc. are installed
+ssl_verification           # Log SSL verification status
 
 # Authenticate with the primary Pi-hole
 primary_session_file="$temp_files_path/primary-session.json"
