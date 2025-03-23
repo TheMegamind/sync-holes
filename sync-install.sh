@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-SCRIPT_VERSION="0.9.7.3"
+SCRIPT_VERSION="0.9.7.4"
 #
 # ===============================================================================
 #                            sync-install.sh
@@ -41,6 +41,7 @@ SCRIPT_VERSION="0.9.7.3"
 #   03-16-2025      0.9.7.1  Revise check for newer install script
 #   03-17-2025      0.9.7.2  Add Retry Options+ when Pi-hole config fails validation
 #   03-17-2025      0.9.7.3  Clarify port suggestion for https//
+#   03-23-2025      0.9.7.4  Improved guidance on default protocol/port pairings
 #
 # Usage:
 #   ./sync-install.sh [options]
@@ -382,8 +383,14 @@ prompt "Do you wish to configure your Pi-hole(s) in '$ENV_PATH' now? (y/N): "
 read -r config_choice
 
 configure_piholes() {
-  info "Note: Pi-hole #1 is the PRIMARY/SOURCE. All others are SECONDARY/TARGETS."
-  info "For https://, Pi-hole typically uses port 443 for its REST API unless changed."
+  echo ""
+  info "Configuration Notes:"
+  info "  Pi-hole #1 is the PRIMARY/SOURCE. All others are SECONDARY/TARGETS."
+  info "  Pi-hole addresses must be entered in the form of http(s)://ip_address:port"
+  info "  For https:, the default port is 443; for http:, use 80 (or sometimes 8080)"
+  info "  Example: https://192.168.1.10:443 or http://192.168.1.10:80"
+  info "  If you changed the Pi-hole webserver.port in advanced settings, use that port."
+  echo ""
 
   # DELETE existing session files to avoid mismatches
   info "Removing any existing session files to avoid stale or mismatched sessions..."
