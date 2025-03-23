@@ -60,7 +60,7 @@ SCRIPT_VERSION="0.9.7.3"
 set -e
 
 #==============================================================================
-# Color Variables
+# Color Codes
 #==============================================================================
 YELLOW="\033[1;33m"
 GREEN="\033[1;32m"
@@ -82,7 +82,7 @@ ADVANCED=0
 CRON_DEFAULT_SCHEDULE="0 3 * * *"  # e.g., run daily at 3:00 AM
 
 #==============================================================================
-# Helper: Print usage
+# Usage Instructions
 #==============================================================================
 usage() {
   cat <<EOF
@@ -383,7 +383,11 @@ read -r config_choice
 
 configure_piholes() {
   info "Note: Pi-hole #1 is the PRIMARY/SOURCE. All others are SECONDARY/TARGETS."
-  info "For https://, Pi-hole typically uses port 443 for its REST API unless changed."
+  
+  # Provide a short reminder about typical ports:
+  info "Reminder: For http, the default port is 80 (or sometimes 8080); for https, it's 443."
+  info "Example: https://192.168.1.10:443 or http://192.168.1.10:80"
+  info "If you changed the Pi-hole webserver.port in advanced settings, use that port."
 
   # DELETE existing session files to avoid mismatches
   info "Removing any existing session files to avoid stale or mismatched sessions..."
@@ -433,7 +437,6 @@ configure_piholes() {
       # Check if validation succeeded
       if [[ -n "$response" ]] && echo "$response" | grep -q '"valid":true'; then
         info "Validation successful for $friendly!"
-        # Immediately store data and break from loop
         done_configuring=1
       else
         # Validation failed
@@ -468,7 +471,6 @@ configure_piholes() {
             read -r confirm_s
             if [[ "$confirm_s" =~ ^[Yy]$ ]]; then
               warn "Skipping configuration for Pi-hole #$i. This Pi-hole won't be added to .env."
-              # We'll set 'friendly' etc. to blank
               friendly=""
               pihole_url=""
               pihole_pass=""
@@ -492,7 +494,6 @@ configure_piholes() {
 
     # If the user ended up skipping this Pi-hole, 'friendly' will be blank.
     if [[ -n "$friendly" && -n "$pihole_url" ]]; then
-      # If it's the first Pi-hole and not done yet, it’s primary
       if (( i == 1 && primary_done == 0 )); then
         run_cmd "sudo sed -i 's|^primary_name=.*|primary_name=\"$friendly\"|' \"$ENV_PATH\" || true"
         run_cmd "sudo sed -i 's|^primary_url=.*|primary_url=\"$pihole_url\"|' \"$ENV_PATH\" || true"
@@ -504,10 +505,10 @@ configure_piholes() {
         second_passes+=("$pihole_pass")
       fi
     else
-      # User explicitly skipped
       warn "Pi-hole #$i was skipped. No data recorded in .env."
     fi
   done
+}
 
 # ---------------------------------------------------------------------------
 # Insert Secondary Arrays Below:
