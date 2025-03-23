@@ -381,9 +381,15 @@ echo ""
 prompt "Do you wish to configure your Pi-hole(s) in '$ENV_PATH' now? (y/N): "
 read -r config_choice
 
+#==============================================================================
+# 7. Prompt to Edit or Configure .env
+#==============================================================================
+echo ""
+prompt "Do you wish to configure your Pi-hole(s) in '$ENV_PATH' now? (y/N): "
+read -r config_choice
+
 configure_piholes() {
   info "Note: Pi-hole #1 is the PRIMARY/SOURCE. All others are SECONDARY/TARGETS."
-  
   # Provide a short reminder about typical ports:
   info "Reminder: For http, the default port is 80 (or sometimes 8080); for https, it's 443."
   info "Example: https://192.168.1.10:443 or http://192.168.1.10:80"
@@ -508,7 +514,69 @@ configure_piholes() {
       warn "Pi-hole #$i was skipped. No data recorded in .env."
     fi
   done
-}
+
+  # ---------------------------------------------------------------------------
+  # Insert Secondary Arrays Below:
+  #   "# ** DO NOT REMOVE OR MODIFY THIS LINE — INSTALL SCRIPT INSERTS DATA BELOW **"
+  # but only if pi_count > 1
+  # ---------------------------------------------------------------------------
+  if (( pi_count > 1 )); then
+    local names_str="secondary_names=("
+    local urls_str="secondary_urls=("
+    local passes_str="secondary_passes=("
+
+    for (( j=0; j<${#second_names[@]}; j++ )); do
+      # Original user input
+      local raw_name="${second_names[$j]}"
+      local raw_url="${second_urls[$j]}"
+      local raw_pass="${second_passes[$j]}"
+
+      # Only escape double quotes so .env remains valid shell syntax
+      raw_name="${raw_name//\"/\\\"}"
+      raw_url="${raw_url//\"/\\\"}"
+      raw_pass="${raw_pass//\"/\\\"}"
+
+      names_str+="\"$raw_name\" "
+      urls_str+="\"$raw_url\" "
+      passes_str+="\"$raw_pass\" "
+    done
+
+    names_str+=")"
+    urls_str+=")"
+    passes_str+=")"
+
+    # Remove any old secondary_ lines from .env
+    run_cmd "sudo sed -i '/^secondary_names=/d' \"$ENV_PATH\""
+    run_cmd "sudo sed -i '/^secondary_urls=/d' \"$ENV_PATH\""
+    run_cmd "sudo sed -i '/^secondary_passes=/d' \"$ENV_PATH\""
+
+    # Build a temporary file with new lines
+    local temp_file
+    temp_file="$(mktemp)"
+    echo "$names_str"  >> "$temp_file"
+    echo "$urls_str"   >> "$temp_file"
+    echo "$passes_str" >> "$temp_file"
+
+    # Insert them right after:
+    # ** DO NOT REMOVE OR MODIFY THIS LINE — INSTALL SCRIPT INSERTS DATA BELOW **
+    run_cmd "sudo sed -i '/^# \\*\\* DO NOT REMOVE OR MODIFY THIS LINE - INSTALL SCRIPT INSERTS DATA BELOW/r $temp_file' \"$ENV_PATH\""
+
+    rm -f "$temp_file"
+  fi
+
+  info "Done configuring Pi-holes!"
+}  # <-- The function ends here with one closing brace
+
+# Decide whether to call configure_piholes() based on user input
+if [[ "$config_choice" =~ ^[Yy]$ ]]; then
+  if [[ $SIMULATE -eq 1 ]]; then
+    info "[SIMULATE] Would configure Pi-holes by prompting user..."
+  else
+    configure_piholes
+  fi
+else
+  info "Skipping Pi-hole configuration. Any existing Pi-hole settings in $ENV_PATH will remain unchanged."
+fi
 
 # ---------------------------------------------------------------------------
 # Insert Secondary Arrays Below:
