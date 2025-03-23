@@ -383,6 +383,10 @@ prompt "Do you wish to configure your Pi-hole(s) in '$ENV_PATH' now? (y/N): "
 read -r config_choice
 
 configure_piholes() {
+  # DELETE any existing session files to avoid mismatches
+  info "Removing any existing session files to avoid stale or mismatched sessions..."
+  run_cmd "sudo rm -f /tmp/primary-session.json /tmp/secondary-session_*.json 2>/dev/null || true"
+  
   echo ""
   info "Configuration Notes:"
   info "  Pi-hole #1 is the PRIMARY/SOURCE. All others are SECONDARY/TARGETS."
@@ -391,10 +395,6 @@ configure_piholes() {
   info "  Example: https://192.168.1.10:443 or http://192.168.1.10:80"
   info "  If you changed the Pi-hole webserver.port in advanced settings, use that port."
   echo ""
-
-  # DELETE existing session files to avoid mismatches
-  info "Removing any existing session files to avoid stale or mismatched sessions..."
-  run_cmd "sudo rm -f /tmp/primary-session.json /tmp/secondary-session_*.json 2>/dev/null || true"
 
   prompt "How many Pi-hole instances do you want to configure? "
   read -r pi_count
