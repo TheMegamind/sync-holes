@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-SCRIPT_VERSION="0.9.7.3"
+SCRIPT_VERSION="0.9.7.4"
 #
 # ===============================================================================
 #                            sync-install.sh
@@ -41,6 +41,7 @@ SCRIPT_VERSION="0.9.7.3"
 #   03-16-2025      0.9.7.1  Revise check for newer install script
 #   03-17-2025      0.9.7.2  Add Retry Options+ when Pi-hole config fails validation
 #   03-17-2025      0.9.7.3  Clarify port suggestion for https//
+#   03-23-2025      0.9.7.4  Add betterguidance on default protocol/port pairings
 #
 # Usage:
 #   ./sync-install.sh [options]
