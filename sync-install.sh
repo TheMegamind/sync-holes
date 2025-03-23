@@ -381,13 +381,6 @@ echo ""
 prompt "Do you wish to configure your Pi-hole(s) in '$ENV_PATH' now? (y/N): "
 read -r config_choice
 
-#==============================================================================
-# 7. Prompt to Edit or Configure .env
-#==============================================================================
-echo ""
-prompt "Do you wish to configure your Pi-hole(s) in '$ENV_PATH' now? (y/N): "
-read -r config_choice
-
 configure_piholes() {
   info "Note: Pi-hole #1 is the PRIMARY/SOURCE. All others are SECONDARY/TARGETS."
   # Provide a short reminder about typical ports:
