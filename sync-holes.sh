@@ -259,7 +259,7 @@ usage() {
     echo "    $(basename "$0") -F /path/to/import_settings.json"
     echo ""
     echo "Note:"
-    echo "  Any import settings keys omitted from the inline or file-based JSON will,"
+    echo "  Any import settings keys omitted from the inline or file-based JSON will"
     echo "  assume their default value from the .env file. So if a user wants to"
     echo "  override only one or two keys, they may supply an abbreviated JSON"
     echo "  (e.g. '{\"dhcp_leases\": false}') and only the default value(s) for the"
@@ -334,18 +334,25 @@ load_env() {
 # Apply CLI Import Settings Overrides
 # =======================================
 import_settings_overrides() {
+
+    # If the user specified -F (file-based JSON), read it in
     if [ -n "$import_settings_file" ]; then
-      if [ -f "$import_settings_file" ]; then
-        override_import_settings=$(cat "$import_settings_file")
-      else
-        log_message "ERROR" "Import settings file '$import_settings_file' not found." "always" "red"
-        exit 1
-      fi
+        if [ -f "$import_settings_file" ]; then
+            override_import_settings="$(cat "$import_settings_file")"
+        else
+            log_message "ERROR" "Import settings file '$import_settings_file' not found." "always" "red"
+            exit 1
+        fi
     fi
 
-    # Check for valid json
-    if ! echo "$override_import_settings" | jq . >/dev/null 2>&1; then
-        handle_error "The inline JSON is invalid. Please check your syntax."
+    # Note: If the user specified -I (inline JSON), it's already stored in
+    #       $override_import_settings from the getopts logic.
+
+    # Validate JSON only if we actually have something in $override_import_settings
+    if [ -n "$override_import_settings" ]; then
+        if ! echo "$override_import_settings" | jq . >/dev/null 2>&1; then
+            handle_error "The provided import settings JSON is invalid. Please check your syntax."
+        fi
     fi
 }
 
