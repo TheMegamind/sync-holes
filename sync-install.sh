@@ -391,7 +391,7 @@ configure_piholes() {
   info "Configuration Notes:"
   info "  Pi-hole #1 is the PRIMARY/SOURCE. All others are SECONDARY/TARGETS."
   info "  Pi-hole addresses must be entered in the form of http(s)://ip_address:port"
-  info "  For https:, the default port is 443; for http:, use 80 (or sometimes 8080)"
+  info "  For https, the default port is 443; for http, use 80 (or sometimes 8080)"
   info "  Example: https://192.168.1.10:443 or http://192.168.1.10:80"
   info "  If you changed the Pi-hole webserver.port in advanced settings, use that port."
   echo ""
@@ -698,6 +698,7 @@ fi
 #==============================================================================
 if [[ -f "$ENV_PATH" ]]; then
   info "Your final .env has been appended to the log: $LOGFILE (with passwords masked)."
+  echo ""
   echo "" >> "$LOGFILE"
   echo "" >> "$LOGFILE"
   echo "=== Final .env (masked) ===" >> "$LOGFILE"
