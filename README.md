@@ -82,14 +82,20 @@
    ```
   - If you see a “Permission denied” error, run `bash sync-install.sh`.
 
-Running `./sync-install.sh` performs a standard installation:
-- Places `sync-holes.sh` in `/usr/local/bin`
-- Copies the `.env` file to `/usr/local/etc`
-- Creates a `/usr/local/bin/sync-holes` symlink
+Running `./sync-install.sh` performs a standard installation, which:
+  - Checks for required dependencies (and attempts to install any that are missing)
+  - Verifies the user is running Pi-hole v6
+  - Configures **and** validates all Pi-hole instances
+  - Offers retries for invalid user entries
+  - Installs `sync-holes.sh` in `/usr/local/bin`
+  - Copies the `.env` file to `/usr/local/etc`
+  - Creates a `/usr/local/bin/sync-holes` symlink
+  - Offers to set up a cron job for automatic synchronization
 
-The installation script checks for required dependencies, verifies the user is running Pi-hole v6, configures and validates all Pi-hole instances, and offers to set up a cron job for automatic synchronization. If dependencies are missing, it attempts to install them (on Debian-based, Fedora-based, or macOS). Otherwise, you must install them manually.
-
-**Note**: Pi-hole addresses **must** be entered in the form of `protocol://ipAddress:port`. For **https**, use `https://ip_address:443`. For **http** try `http://ip_address:80` or `http://ip_address:8080`. _If `webserver.port` has been modified from the defaults in the expert settings, use the values entered there._ 
+**Note**: Pi-hole addresses **must** be entered in the form of `protocol://ipAddress:port`, e.g., `https://198.168.15:443`.
+  - For **https**, use `https://ip_address:443` 
+  - For **http** try `http://ip_address:80` or, if that doesn't work, `http://ip_address:8080`.
+  - _Note: If `webserver.port` has been modified from the defaults in the expert settings, use the values entered there._
 
 ### Optional Advanced Installation
 - If you want to change install directories or skip the auto-symlink, run:
@@ -250,7 +256,6 @@ sudo ./sync-holes.sh -v
 - The most common errors are the result and configuration, in particular the use of an invalid combination of combination(s) of `protocol://ipAddress:port`. Pi-hole addresses **must be entered** in the form of `protocol://ipAddress:port`, e.g., https://198.168.15:443.
   - For **https**, use `https://ip_address:443` 
   - For **http** try `http://ip_address:80` or, if that doesn't work, `http://ip_address:8080`.
-  - _Note: If `webserver.port` has been modified from the defaults in the expert settings, use the values entered there._
 - If an error occurs during installation, review the install log in the directory where `sync-install.sh` is located.
 - If an error occurs while running `sync-holes.sh`, the script prints a message to the console and logs details to `/var/log/sync-holes.log` (or your chosen log location).  
   - Run `sync-holes.sh -v` to display the verbose logs on the terminal. Run `sync-holes.sh -v -u` to unmask sensitive data.   
