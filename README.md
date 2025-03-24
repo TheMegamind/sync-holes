@@ -46,14 +46,12 @@
 
 ## Features
 - Easy, automated script-based installation for Linux and macOS
-- Environment-based configuration via a `.env` file
+- Additional environment-based configuration via a `.env` file
 - Intelligent session management (re-authenticates only when needed)
 - Configurable SSL support for self‑signed certificates
 - Command‑line options to control console output and sensitive data masking
 - Command-line options to override default import configuration settings
 - Detailed logging with configurable size, rotation, and optional data masking
-
-<sub>For users looking for a Windows or Docker-based solution, try [nebula-sync](https://github.com/lovelaze/nebula-sync).</sub> 
 
 ---
 
@@ -65,11 +63,7 @@
 - **curl** – for API requests
 - **Bash 4 (or later)** – to properly handle arrays
 
-**Auto-Installation of Missing Dependencies**  
-- On **Debian-based** systems, the installer tries `apt-get`.  
-- On **Fedora-based** systems, it tries `dnf`.  
-- On **macOS**, it tries `brew`.  
-- If none are found, you must install `git`, `curl`, `jq` manually.
+**Note**: The installer automatically checks for and will attempt to install any missing dependencies.
 
 ---
 
@@ -93,9 +87,9 @@ Running `./sync-install.sh` performs a standard installation:
 - Copies the `.env` file to `/usr/local/etc`
 - Creates a `/usr/local/bin/sync-holes` symlink
 
-The script checks for required dependencies, verifies Pi-hole v6, and offers to set up a cron job for automatic synchronization. If dependencies are missing, it attempts to install them (on Debian-based, Fedora-based, or macOS). Otherwise, you must install them manually.
+The installation script checks for required dependencies, verifies the user is running Pi-hole v6, configures and validates all Pi-hole instances, and offers to set up a cron job for automatic synchronization. If dependencies are missing, it attempts to install them (on Debian-based, Fedora-based, or macOS). Otherwise, you must install them manually.
 
-**Note**: Pi-hole addresses must be entered in the form of `protocol://ipAddress:port`. For **https**, use `https://ip_address:443`. For **http** try `http://ip_address:80` or `http://ip_address:8080`. If `webserver.port` has been modified from the defaults in the expert settings, use the values entered there.  
+**Note**: Pi-hole addresses **must** be entered in the form of `protocol://ipAddress:port`. For **https**, use `https://ip_address:443`. For **http** try `http://ip_address:80` or `http://ip_address:8080`. _If `webserver.port` has been modified from the defaults in the expert settings, use the values entered there._ 
 
 ### Optional Advanced Installation
 - If you want to change install directories or skip the auto-symlink, run:
@@ -253,11 +247,14 @@ sudo ./sync-holes.sh -v
 ---
 
 ## Troubleshooting
-- The most common errors involve incorrect `.env` configuration (e.g., typos, invalid array syntax).  
-- If an error occurs, the script prints a message to the console and logs details to `/var/log/sync-holes.log` (or your chosen log location).  
-- Run `sync-holes.sh -v` to see verbose logs, and `sync-holes.sh -v -u` to unmask sensitive data.  
-- The script attempts to install missing dependencies (on Debian-based, Fedora-based, or macOS). If that fails, you must install them manually.  
-- **If you still have issues**, please open a GitHub issue with a **verbose log** of the run. Also include your OS (Debian, Fedora or macOS) and the specific hardware the script is runnning on.   
+- The most common errors are the result and configuration, in particular the use of an invalid combination of combination(s) of `protocol://ipAddress:port`. Pi-hole addresses **must be entered** in the form of `protocol://ipAddress:port`, e.g., https://198.168.15:443.
+  - For **https**, use `https://ip_address:443` 
+  - For **http** try `http://ip_address:80` or, if that doesn't work, `http://ip_address:8080`.
+  - _Note: If `webserver.port` has been modified from the defaults in the expert settings, use the values entered there._
+- If an error occurs during installation, review the install log in the directory where `sync-install.sh` is located.
+- If an error occurs while running `sync-holes.sh`, the script prints a message to the console and logs details to `/var/log/sync-holes.log` (or your chosen log location).  
+  - Run `sync-holes.sh -v` to display the verbose logs on the terminal. Run `sync-holes.sh -v -u` to unmask sensitive data.   
+- **If you still have issues**, please open a GitHub issue with a **complete, verbose log** of the run. Also include your OS (Debian, Fedora or macOS) and the specific hardware the script is runnning on.   
 
 ---
 
