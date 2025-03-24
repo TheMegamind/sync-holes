@@ -95,7 +95,7 @@ Running `./sync-install.sh` performs a standard installation:
 
 The script checks for required dependencies, verifies Pi-hole v6, and offers to set up a cron job for automatic synchronization. If dependencies are missing, it attempts to install them (on Debian-based, Fedora-based, or macOS). Otherwise, you must install them manually.
 
-**Note**: Pi-hole addresses must be entered in the form of `http(s)://ip_address:port`. Typically, for `http://` the correct port is 80 (or sometimes 8080). So for `http://` try `http://ip_address:80` or `http://ip_address:8080`. For `https://`, use `https://ip_address:443`. If `webserver.port` has been modified in the expert settings, use the values there.  
+**Note**: Pi-hole addresses must be entered in the form of `protocol://ipAddress:port`. For **https**, use `https://ip_address:443`. For **http** try `http://ip_address:80` or `http://ip_address:8080`. If `webserver.port` has been modified from the defaults in the expert settings, use the values entered there.  
 
 ### Optional Advanced Installation
 - If you want to change install directories or skip the auto-symlink, run:
