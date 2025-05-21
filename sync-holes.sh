@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-SCRIPT_VERSION="0.9.7.2"
+SCRIPT_VERSION="0.9.7.3"
 #
 # ===============================================================================
 #                            sync-holes.sh
@@ -45,6 +45,7 @@ SCRIPT_VERSION="0.9.7.2"
 #   03-15-2025    0.9.7    Bump Version # for newest release
 #   03-17-2025    0.9.7.1  Remove Session Files when Configuration changes
 #   03-21-2025    0.9.7.2  Structural Refactoring. +Validate CLI Import JSON
+#   05-21-2025    0.9.7.3  Modify validation test fix to use jq instead of grep
 #
 # ===============================================================================
 #
@@ -449,8 +450,11 @@ test_pihole_auth() {
     handle_error "Response from $name is not valid JSON. Possibly a 404 or old Pi-hole version. ($url)"
   fi
 
-  # Check if we see "valid":true
-  if ! echo "$response" | grep -q '"valid":true'; then
+  # Extract session.valid value and check explicitly
+  local session_valid
+  session_valid=$(echo "$response" | jq -r '.session.valid // false')
+
+  if [[ "$session_valid" != "true" ]]; then
     handle_error "Validation failed for $name. $(mask_sensitive_data "$response")"
   fi
 
