@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-SCRIPT_VERSION="0.9.7.3"
+SCRIPT_VERSION="0.9.7.4"
 #
 # ===============================================================================
 #                            sync-holes.sh
@@ -46,6 +46,7 @@ SCRIPT_VERSION="0.9.7.3"
 #   03-17-2025    0.9.7.1  Remove Session Files when Configuration changes
 #   03-21-2025    0.9.7.2  Structural Refactoring. +Validate CLI Import JSON
 #   05-21-2025    0.9.7.3  Modify validation test fix to use jq instead of grep
+#   05-22-2025    0.9.7.4  Revise error handling in upload_teleporter
 #
 # ===============================================================================
 #
