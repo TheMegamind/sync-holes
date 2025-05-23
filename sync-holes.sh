@@ -818,8 +818,8 @@ upload_teleporter_file() {
 
     log_message "UPLOAD" "API Response: $(echo "$upload_response" | jq -c .)" "if_verbose"
 
-    if echo "$upload_response" | jq -e '.error' >/dev/null 2>&1; then
-      handle_error "$(echo "$upload_response" | jq -r '.error.message')"
+    if [ "$(echo "$upload_response" | jq -r '.error // empty')" != "" ]; then
+      handle_error "$(echo "$upload_response" | jq -r '.error.message // "Unknown error"')"
     fi
 
     log_message "UPLOAD" "Teleporter file uploaded to $pi_name." "always"
