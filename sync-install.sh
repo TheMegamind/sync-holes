@@ -42,6 +42,7 @@ SCRIPT_VERSION="0.9.7.4"
 #   03-17-2025      0.9.7.2  Add Retry Options+ when Pi-hole config fails validation
 #   03-17-2025      0.9.7.3  Clarify port suggestion for https//
 #   03-23-2025      0.9.7.4  Improved guidance on default protocol/port pairings
+#   05-25-2025      0.9.7.5  Default to root cron for standard installation
 #
 # Usage:
 #   ./sync-install.sh [options]
@@ -615,7 +616,28 @@ if [[ "$cron_choice" =~ ^[Yy]$ ]]; then
   SCRIPT_PATH="$INSTALL_DIR/sync-holes"
   CRON_LINE="$user_schedule $SCRIPT_PATH -v"
 
-  existing_cron="$(crontab -l 2>/dev/null || true)"
+  # Determine whether to use user or root crontab
+  if [[ "$ADVANCED_MODE" == "1" ]]; then
+    prompt "Install cron job for root or current user? [R/u]: "
+    read -r cron_user_choice
+    if [[ "$cron_user_choice" =~ ^[Uu]$ ]]; then
+      CRONTAB_CMD="crontab"
+      CRONTAB_READ="crontab -l"
+    else
+      CRONTAB_CMD="sudo crontab"
+      CRONTAB_READ="sudo crontab -l"
+    fi
+  else
+    if [[ "$EUID" -eq 0 ]]; then
+      CRONTAB_CMD="crontab"
+      CRONTAB_READ="crontab -l"
+    else
+      CRONTAB_CMD="sudo crontab"
+      CRONTAB_READ="sudo crontab -l"
+    fi
+  fi
+
+  existing_cron="$($CRONTAB_READ 2>/dev/null || true)"
   existing_line="$(echo "$existing_cron" | grep "$SCRIPT_PATH" || true)"
 
   if [[ -n "$existing_line" ]]; then
@@ -661,13 +683,13 @@ $CRON_LINE"
 $CRON_LINE"
   fi
 
-  if [[ "$user_choice" != "C" ]]; then
+  if [[ "$user_choice" != "C" && "$user_choice" != "c" ]]; then
     if [[ $SIMULATE -eq 1 ]]; then
       info "[SIMULATE] Would update crontab with:"
       echo "$updated_cron"
     else
-      echo "$updated_cron" | crontab -
-      info "Crontab updated."
+      echo "$updated_cron" | $CRONTAB_CMD -
+      info "Crontab updated via $CRONTAB_CMD."
     fi
   fi
 fi
